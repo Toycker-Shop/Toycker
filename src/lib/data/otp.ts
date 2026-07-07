@@ -3,7 +3,7 @@
 import crypto from "crypto"
 import { createAdminClient } from "@/lib/supabase/admin"
 import { createClient } from "@/lib/supabase/server"
-import { sendInteraktOtp } from "@/lib/integrations/interakt"
+import { sendMark360Otp } from "@/lib/integrations/mark360"
 import { revalidatePath, revalidateTag } from "next/cache"
 import { redirect } from "next/navigation"
 import { cookies as nextCookies } from "next/headers"
@@ -26,7 +26,7 @@ type ProfileLookup = {
 }
 
 const DEFAULT_RESEND_COOLDOWN_SECONDS = 60
-const DEFAULT_OTP_TTL_SECONDS = 180
+const DEFAULT_OTP_TTL_SECONDS = 300
 const DEFAULT_OTP_MAX_ATTEMPTS = 3
 const DEFAULT_WHATSAPP_LOGIN_EMAIL_DOMAIN = "wa.toycker.store"
 
@@ -309,10 +309,9 @@ export async function sendOtp(
   }
 
   try {
-    const resp = await sendInteraktOtp({
+    const resp = await sendMark360Otp({
       destination: normalizedPhone,
       otpCode: code,
-      userName: "Toycker Customer",
     })
     const providerMessageId = resp.providerMessageId ?? null;
 
@@ -332,12 +331,12 @@ export async function sendOtp(
       })
       .eq("id", createdOtp.id)
 
-    console.error("Failed to send Interakt OTP:", error)
+    console.error("Failed to send WhatsApp OTP through Mark360:", error)
 
     return {
       success: false,
       error:
-        "Failed to send the WhatsApp OTP. Please check the Interakt configuration and try again.",
+        "Failed to send the WhatsApp OTP. Please check the Mark360 configuration and try again.",
     }
   }
 
@@ -563,3 +562,4 @@ export async function verifyOtp(
 
   redirect(requestedRedirectPath || "/account")
 }
+
