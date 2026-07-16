@@ -468,6 +468,7 @@ export interface ShippingPartner {
 
 export type TrivaraOrderBookingStatus =
   | "pending"
+  | "new_order"
   | "booked"
   | "failed"
   | "skipped"
@@ -478,6 +479,8 @@ export interface TrivaraOrderBooking {
   order_id: string
   status: TrivaraOrderBookingStatus
   trivara_reference_number: string | null
+  trivara_order_id: string | null
+  trivara_order_status: string | null
   request_payload: Record<string, unknown>
   response_payload: Record<string, unknown> | null
   error_message: string | null
@@ -490,6 +493,7 @@ export interface TrivaraOrderBooking {
   cancel_error_message: string | null
   cancelled_at: string | null
   booked_at: string | null
+  new_order_created_at: string | null
   created_at: string
   updated_at: string
 }
@@ -535,3 +539,4 @@ export interface GlobalSettings {
   is_gift_wrap_enabled: boolean
   updated_at: string
 }
+

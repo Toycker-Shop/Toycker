@@ -1,4 +1,4 @@
-"use server"
+﻿"use server"
 
 /**
  * Chatbot Server Actions
@@ -10,6 +10,7 @@ import { getAuthUser } from "@/lib/data/auth"
 import { retrieveCustomer } from "@/lib/data/customer"
 import { getClubSettings } from "@/lib/data/club"
 import { getRewardWallet } from "@/lib/data/rewards"
+import { getTrivaraFulfillmentMetadata } from "@/lib/util/trivara-fulfillment"
 import { revalidatePath, revalidateTag } from "next/cache"
 
 // Types for chatbot responses
@@ -182,8 +183,14 @@ export async function lookupOrderByDisplayId(displayId: number): Promise<Chatbot
     const items = order.items as Array<unknown> | null
     const itemCount = Array.isArray(items) ? items.length : 0
 
-    // Get shipping partner name
+    // Get shipping partner and Trivara AWB details
     const shippingPartner = order.shipping_partner as { name: string } | null
+    const trivaraFulfillment = getTrivaraFulfillmentMetadata(
+        order.metadata as Record<string, unknown> | null
+    )
+    const awbNumber = order.tracking_number || trivaraFulfillment?.awb || undefined
+    const courierName =
+        trivaraFulfillment?.courierName || shippingPartner?.name || undefined
 
     return {
         found: true,
@@ -193,8 +200,8 @@ export async function lookupOrderByDisplayId(displayId: number): Promise<Chatbot
             paymentStatus: order.payment_status,
             total: order.total_amount,
             createdAt: order.created_at,
-            trackingNumber: order.tracking_number || undefined,
-            shippingPartner: shippingPartner?.name || undefined,
+            trackingNumber: awbNumber,
+            shippingPartner: courierName,
             itemCount
         }
     }

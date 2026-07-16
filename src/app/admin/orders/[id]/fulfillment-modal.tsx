@@ -9,6 +9,7 @@ import { XMarkIcon, TruckIcon } from "@heroicons/react/24/outline"
 interface FulfillmentModalProps {
   orderId: string
   trivaraPartner: ShippingPartner | null
+  initialAwb?: string | null
 }
 
 function FulfillButton({ disabled }: { disabled: boolean }) {
@@ -35,6 +36,7 @@ function FulfillButton({ disabled }: { disabled: boolean }) {
 export default function FulfillmentModal({
   orderId,
   trivaraPartner,
+  initialAwb,
 }: FulfillmentModalProps) {
   const [isOpen, setIsOpen] = useState(false)
   const canFulfill = Boolean(trivaraPartner)
@@ -76,8 +78,8 @@ export default function FulfillmentModal({
                     Fulfill Order
                   </h2>
                   <p className="text-xs text-gray-500">
-                    Use Trivara Logistics and enter the tracking ID received
-                    from Trivara.
+                    Use Trivara Logistics and enter the AWB generated
+                    after shipment creation in Trivara.
                   </p>
                 </div>
               </div>
@@ -120,13 +122,14 @@ export default function FulfillmentModal({
                   htmlFor="tracking_number"
                   className="mb-2 block text-sm font-bold text-gray-700"
                 >
-                  Trivara Tracking ID / AWB *
+                  AWB Number *
                 </label>
                 <input
                   type="text"
                   name="tracking_number"
                   id="tracking_number"
-                  placeholder="Enter the ID shared by Trivara"
+                  placeholder="Enter the AWB from Trivara"
+                  defaultValue={initialAwb || ""}
                   required
                   className="block w-full rounded-lg border border-gray-200 bg-gray-50 px-4 py-3 text-sm transition-all focus:border-transparent focus:bg-white focus:ring-2 focus:ring-indigo-500"
                 />

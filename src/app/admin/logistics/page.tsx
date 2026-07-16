@@ -1,5 +1,5 @@
 import Link from "next/link"
-import { DocumentTextIcon, XCircleIcon } from "@heroicons/react/24/outline"
+import { XCircleIcon } from "@heroicons/react/24/outline"
 import AdminBadge from "@modules/admin/components/admin-badge"
 import AdminPageHeader from "@modules/admin/components/admin-page-header"
 import { AdminPagination } from "@modules/admin/components/admin-pagination"
@@ -10,15 +10,11 @@ import { formatIST } from "@/lib/util/date"
 import {
   cancelTrivaraOrder,
   getTrivaraLogisticsRecords,
-  getTrivaraSyncSnapshots,
-  printTrivaraSlipForForm,
+  getTrivaraLogisticsStatusCounts,
   retryTrivaraBooking,
-  trackTrivaraOrderForForm,
+  syncTrivaraOrderStatus,
 } from "@/lib/data/trivara-logistics"
-import {
-  TrivaraOrderBookingStatus,
-} from "@/lib/supabase/types"
-import { LogisticsSyncActions } from "./logistics-sync-actions"
+import { TrivaraOrderBookingStatus } from "@/lib/supabase/types"
 import {
   getPaymentMethodDisplay,
   getPaymentStatusDisplay,
@@ -30,16 +26,19 @@ const STATUS_FILTERS: Array<{
 }> = [
   { label: "All", value: "all" },
   { label: "Pending", value: "pending" },
-  { label: "Booked", value: "booked" },
+  { label: "New Order", value: "new_order" },
   { label: "Failed", value: "failed" },
   { label: "Skipped", value: "skipped" },
   { label: "Cancelled", value: "cancelled" },
+  { label: "Legacy Booked", value: "booked" },
 ]
 
 function getStatusBadge(status: TrivaraOrderBookingStatus) {
   switch (status) {
+    case "new_order":
+      return { variant: "info" as const, label: "New Order" }
     case "booked":
-      return { variant: "success" as const, label: "Booked" }
+      return { variant: "success" as const, label: "Legacy Booked" }
     case "pending":
       return { variant: "info" as const, label: "Pending" }
     case "failed":
@@ -49,6 +48,53 @@ function getStatusBadge(status: TrivaraOrderBookingStatus) {
     case "cancelled":
       return { variant: "neutral" as const, label: "Cancelled" }
   }
+}
+
+function formatRemoteStatus(record: {
+  status: TrivaraOrderBookingStatus
+  trivara_order_status: string | null
+}) {
+  if (record.trivara_order_status) {
+    return record.trivara_order_status
+  }
+
+  if (record.status === "new_order") {
+    return "New Order"
+  }
+
+  if (record.status === "booked") {
+    return "Legacy Booked"
+  }
+
+  return record.status
+    .replace(/_/g, " ")
+    .replace(/\b\w/g, (letter) => letter.toUpperCase())
+}
+
+function SummaryCard({
+  label,
+  value,
+  tone,
+}: {
+  label: string
+  value: number
+  tone: "gray" | "blue" | "red" | "amber"
+}) {
+  const toneClass = {
+    gray: "bg-gray-50 text-gray-900",
+    blue: "bg-blue-50 text-blue-900",
+    red: "bg-red-50 text-red-900",
+    amber: "bg-amber-50 text-amber-900",
+  }[tone]
+
+  return (
+    <div className={`rounded-xl border border-admin-border p-4 ${toneClass}`}>
+      <p className="text-xs font-semibold uppercase tracking-wide opacity-70">
+        {label}
+      </p>
+      <p className="mt-2 text-2xl font-black">{value}</p>
+    </div>
+  )
 }
 
 export default async function AdminLogistics({
@@ -66,7 +112,7 @@ export default async function AdminLogistics({
     status = "all",
   } = await searchParams
   const pageNumber = parseInt(page, 10) || 1
-  const [{ records, count, totalPages, currentPage }, snapshots] =
+  const [{ records, count, totalPages, currentPage }, statusCounts] =
     await Promise.all([
       getTrivaraLogisticsRecords({
         page: pageNumber,
@@ -74,22 +120,27 @@ export default async function AdminLogistics({
         search,
         status,
       }),
-      getTrivaraSyncSnapshots(),
+      getTrivaraLogisticsStatusCounts(),
     ])
 
   return (
     <div className="space-y-6">
       <AdminPageHeader
         title="Logistics"
-        subtitle="Manage Trivara bookings, tracking, slips, cancellation, and master syncs."
+        subtitle="Manage Trivara New Order syncs created from accepted Toycker orders. Booking is handled in the new Trivara dashboard."
       />
 
-      <LogisticsSyncActions initialSnapshots={snapshots} />
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <SummaryCard label="Total records" value={statusCounts.total} tone="gray" />
+        <SummaryCard label="New Orders" value={statusCounts.new_order} tone="blue" />
+        <SummaryCard label="Failed syncs" value={statusCounts.failed} tone="red" />
+        <SummaryCard label="Skipped syncs" value={statusCounts.skipped} tone="amber" />
+      </div>
 
       <AdminSearchInput
         defaultValue={search}
         basePath="/admin/logistics"
-        placeholder="Search by order ID, customer email, or Trivara reference..."
+        placeholder="Search by order ID, customer email, or Trivara order ID..."
       />
 
       <div className="flex flex-wrap gap-2">
@@ -122,7 +173,7 @@ export default async function AdminLogistics({
       </div>
 
       <AdminTableWrapper className="rounded-xl border border-admin-border bg-white shadow-sm">
-        <table className="min-w-full divide-y divide-gray-200">
+        <table className="min-w-full divide-y divide-gray-200 table-auto">
           <thead className="bg-[#f7f8f9]">
             <tr>
               <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
@@ -132,7 +183,7 @@ export default async function AdminLogistics({
                 Customer
               </th>
               <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
-                Trivara
+                Trivara New Order
               </th>
               <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
                 Payment
@@ -148,7 +199,7 @@ export default async function AdminLogistics({
           <tbody className="divide-y divide-gray-100 bg-white">
             {records.map((record) => {
               const statusBadge = getStatusBadge(record.status)
-              const canUseReference = Boolean(record.trivara_reference_number)
+              const hasTrivaraOrderId = Boolean(record.trivara_order_id)
               const paymentStatus = record.order
                 ? getPaymentStatusDisplay({
                     paymentStatus: record.order.payment_status,
@@ -168,7 +219,10 @@ export default async function AdminLogistics({
                 record.order &&
                   ["cancelled", "failed"].includes(record.order.status) &&
                   record.status !== "cancelled" &&
-                  canUseReference
+                  hasTrivaraOrderId
+              )
+              const canSyncRemoteStatus = Boolean(
+                hasTrivaraOrderId && record.status !== "cancelled"
               )
 
               return (
@@ -189,7 +243,7 @@ export default async function AdminLogistics({
                       {record.order?.customer_email || "Order not found"}
                     </p>
                     <p className="mt-1 text-xs text-gray-400">
-                      {record.order?.status || ""}
+                      Toycker: {record.order?.status || "-"}
                     </p>
                   </td>
                   <td className="px-6 py-4">
@@ -197,7 +251,10 @@ export default async function AdminLogistics({
                       {statusBadge.label}
                     </AdminBadge>
                     <p className="mt-2 text-xs font-mono text-gray-500">
-                      {record.trivara_reference_number || "No reference"}
+                      {record.trivara_order_id || "No Trivara order ID"}
+                    </p>
+                    <p className="mt-1 text-xs text-gray-500">
+                      Remote: {formatRemoteStatus(record)}
                     </p>
                     {record.error_message && (
                       <p className="mt-1 max-w-xs truncate text-xs text-red-600">
@@ -235,24 +292,16 @@ export default async function AdminLogistics({
                       {canRetry && (
                         <form action={retryTrivaraBooking.bind(null, record.order_id)}>
                           <button className="rounded-lg bg-indigo-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-indigo-700">
-                            Retry
+                            Retry Sync
                           </button>
                         </form>
                       )}
-                      {canUseReference && (
-                        <>
-                          <form action={trackTrivaraOrderForForm.bind(null, record.order_id)}>
-                            <button className="rounded-lg bg-gray-100 px-3 py-1.5 text-xs font-semibold text-gray-700 hover:bg-gray-200">
-                              Track
-                            </button>
-                          </form>
-                          <form action={printTrivaraSlipForForm.bind(null, record.order_id)}>
-                            <button className="inline-flex items-center gap-1 rounded-lg bg-gray-100 px-3 py-1.5 text-xs font-semibold text-gray-700 hover:bg-gray-200">
-                              <DocumentTextIcon className="h-3.5 w-3.5" />
-                              Slip
-                            </button>
-                          </form>
-                        </>
+                      {canSyncRemoteStatus && (
+                        <form action={syncTrivaraOrderStatus.bind(null, record.order_id)}>
+                          <button className="inline-flex items-center gap-1 rounded-lg bg-blue-50 px-3 py-1.5 text-xs font-semibold text-blue-700 hover:bg-blue-100">
+                            Sync from Trivara
+                          </button>
+                        </form>
                       )}
                       {(canCancelOrder || canSyncTrivaraCancellation) && (
                         <form action={cancelTrivaraOrder.bind(null, record.order_id)}>

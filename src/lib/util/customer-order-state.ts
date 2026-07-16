@@ -1,4 +1,5 @@
 import { Order } from "@/lib/supabase/types"
+import { getPendingPaymentProviderId } from "@/lib/util/order-pricing"
 
 const CANCELLED_ORDER_STATUSES = new Set<Order["status"]>([
   "cancelled",
@@ -8,6 +9,12 @@ const CANCELLED_ORDER_STATUSES = new Set<Order["status"]>([
 const FAILED_PAYMENT_STATUSES = new Set(["failed", "cancelled"])
 const SUCCESS_PAYMENT_STATUSES = new Set(["captured", "paid", "partially_paid"])
 const PENDING_PAYMENT_STATUSES = new Set(["pending", "awaiting", "unpaid"])
+const ACCEPTED_ONLINE_PAYMENT_STATUSES = new Set(["captured", "paid"])
+const ACCEPTED_PARTIAL_PAYMENT_STATUSES = new Set([
+  "partially_paid",
+  "captured",
+  "paid",
+])
 
 export type CustomerOrderPageState =
   | "confirmed"
@@ -23,6 +30,13 @@ type CustomerOrderStateInput = Pick<
 
 type CustomerOrderMetadataInput = CustomerOrderStateInput &
   Pick<Order, "display_id">
+
+type AcceptPaymentInput = Pick<
+  Order,
+  "payment_method" | "payment_status" | "metadata"
+> & {
+  payment_collection?: Order["payment_collection"]
+}
 
 export interface CustomerOrderPageContent {
   state: CustomerOrderPageState
@@ -52,6 +66,32 @@ export const isCashOnDeliveryLikeOrder = (
     normalizedMethod.includes("pp_system_default") ||
     normalizedMethod === "manual"
   )
+}
+
+export const canAcceptOrderForPayment = (order: AcceptPaymentInput): boolean => {
+  const paymentMethod =
+    order.payment_method ||
+    getMetadataPaymentMethod(order.metadata) ||
+    getPendingPaymentProviderId(order.payment_collection) ||
+    ""
+  const normalizedMethod = paymentMethod.trim().toLowerCase()
+  const normalizedStatus = (order.payment_status || "").trim().toLowerCase()
+
+  if (
+    !normalizedMethod ||
+    isCashOnDeliveryLikeOrder({
+      payment_method: paymentMethod,
+      metadata: order.metadata,
+    })
+  ) {
+    return true
+  }
+
+  if (normalizedMethod.includes("partial")) {
+    return ACCEPTED_PARTIAL_PAYMENT_STATUSES.has(normalizedStatus)
+  }
+
+  return ACCEPTED_ONLINE_PAYMENT_STATUSES.has(normalizedStatus)
 }
 
 const getEffectivePaymentStatus = (
