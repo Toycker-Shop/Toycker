@@ -1,4 +1,4 @@
-﻿import Link from "next/link"
+import Link from "next/link"
 import { notFound } from "next/navigation"
 import type { ReactNode } from "react"
 import {
@@ -9,6 +9,7 @@ import {
 } from "@heroicons/react/24/outline"
 import AdminBadge from "@modules/admin/components/admin-badge"
 import AdminCard from "@modules/admin/components/admin-card"
+import RealtimeLogisticsListener from "@modules/admin/components/realtime-logistics-listener"
 import { convertToLocale } from "@lib/util/money"
 import { formatIST } from "@/lib/util/date"
 import {
@@ -508,6 +509,7 @@ export default async function AdminLogisticsDetail({ params }: Props) {
 
   return (
     <div className="space-y-6">
+      <RealtimeLogisticsListener orderId={record.order_id} />
       <nav className="flex items-center text-xs font-bold uppercase tracking-widest text-gray-400">
         <Link
           href="/admin/logistics"

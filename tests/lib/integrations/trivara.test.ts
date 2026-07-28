@@ -1,8 +1,10 @@
-﻿import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 import {
   buildTrivaraNewOrderPayload,
   extractTrivaraApiOrderId,
+  extractTrivaraExternalOrderId,
+  extractToyckerOrderIdFromTrivaraExternalId,
   extractTrivaraOrderId,
   extractTrivaraOrderStatus,
   extractTrivaraShipmentDetails,
@@ -115,6 +117,34 @@ describe("Trivara new dashboard integration", () => {
     process.env = originalEnv
   })
 
+
+  it("extracts Toycker external order IDs from nested webhook payloads", () => {
+    const payload = {
+      event: "order.updated",
+      data: {
+        order: {
+          externalOrderId: "toycker_274fa7f8-8153-40e9-9881-70afe97e541d",
+        },
+      },
+    }
+
+    const externalOrderId = extractTrivaraExternalOrderId(payload)
+
+    expect(externalOrderId).toBe(
+      "toycker_274fa7f8-8153-40e9-9881-70afe97e541d"
+    )
+    expect(extractToyckerOrderIdFromTrivaraExternalId(externalOrderId)).toBe(
+      "274fa7f8-8153-40e9-9881-70afe97e541d"
+    )
+  })
+
+  it("keeps unprefixed external order IDs usable for webhook matching", () => {
+    expect(
+      extractToyckerOrderIdFromTrivaraExternalId(
+        "274fa7f8-8153-40e9-9881-70afe97e541d"
+      )
+    ).toBe("274fa7f8-8153-40e9-9881-70afe97e541d")
+  })
   it("builds a New Order COD payload from Toycker order data", () => {
     const payload = buildTrivaraNewOrderPayload(buildOrder(), newOrderConfig)
 

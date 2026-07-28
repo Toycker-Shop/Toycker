@@ -2,6 +2,7 @@ import Link from "next/link"
 import { XCircleIcon } from "@heroicons/react/24/outline"
 import AdminBadge from "@modules/admin/components/admin-badge"
 import AdminPageHeader from "@modules/admin/components/admin-page-header"
+import RealtimeLogisticsListener from "@modules/admin/components/realtime-logistics-listener"
 import { AdminPagination } from "@modules/admin/components/admin-pagination"
 import { AdminSearchInput } from "@modules/admin/components/admin-search-input"
 import { AdminTableWrapper } from "@modules/admin/components/admin-table-wrapper"
@@ -125,6 +126,7 @@ export default async function AdminLogistics({
 
   return (
     <div className="space-y-6">
+      <RealtimeLogisticsListener />
       <AdminPageHeader
         title="Logistics"
         subtitle="Manage Trivara New Order syncs created from accepted Toycker orders. Booking is handled in the new Trivara dashboard."

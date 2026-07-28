@@ -1,4 +1,4 @@
-﻿import { Order } from "@/lib/supabase/types"
+import { Order } from "@/lib/supabase/types"
 import { isCashOnDeliveryLikeOrder } from "@/lib/util/customer-order-state"
 import { getPartialPaymentDisplayData } from "@/lib/util/order-pricing"
 
@@ -553,6 +553,40 @@ export function extractTrivaraOrderId(
   )
 }
 
+export function extractTrivaraExternalOrderId(
+  value: Record<string, unknown> | null
+): string | null {
+  if (!value) {
+    return null
+  }
+
+  return extractTrivaraPayloadString(value, [
+    "externalOrderId",
+    "external_order_id",
+    "channelOrderId",
+    "channel_order_id",
+    "clientOrderId",
+    "client_order_id",
+    "merchantOrderId",
+    "merchant_order_id",
+    "referenceOrderId",
+    "reference_order_id",
+  ])
+}
+
+export function extractToyckerOrderIdFromTrivaraExternalId(
+  externalOrderId: string | null
+): string | null {
+  const trimmed = externalOrderId?.trim()
+
+  if (!trimmed) {
+    return null
+  }
+
+  return trimmed.startsWith("toycker_")
+    ? trimmed.slice("toycker_".length)
+    : trimmed
+}
 export function extractTrivaraApiOrderId(
   value: Record<string, unknown> | null
 ): string | null {
