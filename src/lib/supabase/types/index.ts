@@ -498,6 +498,28 @@ export interface TrivaraOrderBooking {
   updated_at: string
 }
 
+export type TrivaraWebhookEventStatus =
+  | "received"
+  | "processed"
+  | "ignored"
+  | "failed"
+
+export interface TrivaraWebhookEvent {
+  id: string
+  event_name: string | null
+  merchant_id: string | null
+  extracted_external_order_id: string | null
+  extracted_toycker_order_id: string | null
+  extracted_trivara_order_id: string | null
+  extracted_trivara_api_order_id: string | null
+  matched_order_id: string | null
+  status: TrivaraWebhookEventStatus
+  response_status: number | null
+  error_message: string | null
+  payload: Record<string, unknown>
+  processed_at: string | null
+  created_at: string
+}
 export type TrivaraSyncSnapshotKey =
   | "total_orders"
   | "pickup_locations"

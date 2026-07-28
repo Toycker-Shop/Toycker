@@ -59,14 +59,18 @@ export async function POST(request: NextRequest) {
     const result = await processTrivaraWebhookPayload(payload)
 
     if (!result.matched) {
-      return NextResponse.json(
-        { success: false, error: result.error },
-        { status: 422 }
-      )
+      return NextResponse.json({
+        success: true,
+        matched: false,
+        eventId: result.eventId,
+        message: result.message,
+      })
     }
 
     return NextResponse.json({
       success: true,
+      matched: true,
+      eventId: result.eventId,
       orderId: result.orderId,
       message: result.message,
     })

@@ -1,5 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
+vi.mock("server-only", () => ({}))
+
 import {
   buildTrivaraNewOrderPayload,
   extractTrivaraApiOrderId,
@@ -7,6 +9,8 @@ import {
   extractToyckerOrderIdFromTrivaraExternalId,
   extractTrivaraOrderId,
   extractTrivaraOrderStatus,
+  extractTrivaraMerchantId,
+  extractTrivaraWebhookEventName,
   extractTrivaraShipmentDetails,
   getTrivaraNewApiConfig,
   getTrivaraResponseBusinessError,
@@ -17,6 +21,10 @@ import {
   TrivaraNewApiConfig,
 } from "@/lib/integrations/trivara"
 import { Order } from "@/lib/supabase/types"
+import {
+  getTrivaraWebhookAuthToken,
+  verifyTrivaraWebhookAuthorization,
+} from "@/lib/integrations/trivara-webhook"
 
 const newOrderConfig: Pick<
   TrivaraNewApiConfig,
@@ -144,6 +152,28 @@ describe("Trivara new dashboard integration", () => {
         "274fa7f8-8153-40e9-9881-70afe97e541d"
       )
     ).toBe("274fa7f8-8153-40e9-9881-70afe97e541d")
+  })
+
+  it("extracts Trivara webhook identifiers from alternate field names", () => {
+    const payload = {
+      eventType: "order.shipped",
+      merchant_id: "merchant-1",
+      data: {
+        seller_order_id: "toycker_ord_1275ce87-4a72-453d-86a7-4fb2b7edf612",
+        trivaraOrderId: "TRV-000007",
+        trivaraApiOrderId: "cms4acq1u00522gpczleou6nm",
+      },
+    }
+
+    expect(extractTrivaraWebhookEventName(payload)).toBe("order.shipped")
+    expect(extractTrivaraMerchantId(payload)).toBe("merchant-1")
+    expect(extractTrivaraExternalOrderId(payload)).toBe(
+      "toycker_ord_1275ce87-4a72-453d-86a7-4fb2b7edf612"
+    )
+    expect(extractTrivaraOrderId(payload)).toBe("TRV-000007")
+    expect(extractTrivaraApiOrderId(payload)).toBe(
+      "cms4acq1u00522gpczleou6nm"
+    )
   })
   it("builds a New Order COD payload from Toycker order data", () => {
     const payload = buildTrivaraNewOrderPayload(buildOrder(), newOrderConfig)
@@ -376,6 +406,30 @@ describe("Trivara new dashboard integration", () => {
 
     expect(() => getTrivaraNewApiConfig()).toThrow(
       "Missing required environment variable: TRIVARA_API_SECRET"
+    )
+  })
+
+  it("accepts only the configured Trivara webhook bearer token", () => {
+    expect(
+      verifyTrivaraWebhookAuthorization(
+        "Bearer trivara_wh_12345678901234567890",
+        "trivara_wh_12345678901234567890"
+      )
+    ).toEqual({ ok: true })
+
+    expect(
+      verifyTrivaraWebhookAuthorization(
+        "Bearer wrong-token",
+        "trivara_wh_12345678901234567890"
+      )
+    ).toMatchObject({ ok: false })
+  })
+
+  it("requires a strong Trivara webhook token in environment settings", () => {
+    process.env.TRIVARA_WEBHOOK_AUTH_TOKEN = "short"
+
+    expect(() => getTrivaraWebhookAuthToken()).toThrow(
+      "TRIVARA_WEBHOOK_AUTH_TOKEN must be at least 20 characters long"
     )
   })
 

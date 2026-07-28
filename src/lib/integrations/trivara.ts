@@ -548,8 +548,18 @@ export function extractTrivaraOrderId(
   }
 
   return (
-    extractTrivaraPayloadString(value, ["orderId", "order_id"]) ||
-    extractTrivaraApiOrderId(value)
+    extractTrivaraPayloadString(value, [
+      "orderId",
+      "order_id",
+      "trivaraOrderId",
+      "trivara_order_id",
+      "orderNumber",
+      "order_number",
+      "orderNo",
+      "order_no",
+      "referenceNumber",
+      "reference_number",
+    ]) || extractTrivaraApiOrderId(value)
   )
 }
 
@@ -571,6 +581,14 @@ export function extractTrivaraExternalOrderId(
     "merchant_order_id",
     "referenceOrderId",
     "reference_order_id",
+    "sellerOrderId",
+    "seller_order_id",
+    "sellerOrderNumber",
+    "seller_order_number",
+    "channelOrderNumber",
+    "channel_order_number",
+    "externalOrderNumber",
+    "external_order_number",
   ])
 }
 
@@ -594,9 +612,52 @@ export function extractTrivaraApiOrderId(
     return null
   }
 
-  return extractTrivaraPayloadString(value, ["id", "_id"])
+  return extractTrivaraPayloadString(value, [
+    "id",
+    "_id",
+    "apiOrderId",
+    "api_order_id",
+    "trivaraApiOrderId",
+    "trivara_api_order_id",
+    "internalOrderId",
+    "internal_order_id",
+  ])
 }
 
+export function extractTrivaraWebhookEventName(
+  value: Record<string, unknown> | null
+): string | null {
+  if (!value) {
+    return null
+  }
+
+  return extractTrivaraPayloadString(value, [
+    "event",
+    "eventName",
+    "event_name",
+    "eventType",
+    "event_type",
+    "topic",
+    "type",
+  ])
+}
+
+export function extractTrivaraMerchantId(
+  value: Record<string, unknown> | null
+): string | null {
+  if (!value) {
+    return null
+  }
+
+  return extractTrivaraPayloadString(value, [
+    "merchantId",
+    "merchant_id",
+    "sellerId",
+    "seller_id",
+    "accountId",
+    "account_id",
+  ])
+}
 export function extractTrivaraOrderStatus(
   value: Record<string, unknown> | null
 ): string | null {
