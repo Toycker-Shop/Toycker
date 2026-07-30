@@ -504,6 +504,61 @@ describe("Trivara new dashboard integration", () => {
     expect(extractTrivaraOrderStatus(payload)).toBe("PENDING")
   })
 
+  it("extracts the real tracking webhook shape from data.order", () => {
+    const payload = {
+      status: "SUCCESS",
+      data: {
+        order: {
+          awb: "14344968988391",
+          orderId: "TRV-001254",
+          status: "UNDELIVERED",
+          courier: "XPRESSBEES",
+          paymentMode: "Prepaid",
+          timeline: [
+            {
+              id: "timeline-event-1",
+              orderId: "internal-trivara-db-order-id",
+              status: "OUT_FOR_DELIVERY",
+            },
+          ],
+        },
+      },
+      message: "Tracking info loaded",
+      extra: null,
+    }
+
+    expect(extractTrivaraOrderId(payload)).toBe("TRV-001254")
+    expect(extractTrivaraOrderStatus(payload)).toBe("UNDELIVERED")
+    expect(extractTrivaraApiOrderId(payload)).not.toBe("timeline-event-1")
+    expect(extractTrivaraShipmentDetails(payload)).toMatchObject({
+      awb: "14344968988391",
+      courierName: "XPRESSBEES",
+      shipmentStatus: "UNDELIVERED",
+    })
+  })
+
+  it("does not extract real order data from Trivara test webhooks", () => {
+    const payload = {
+      event: null,
+      merchantId: "toycker_india_fc1e44",
+      timestamp: "2026-07-29T05:46:29.918Z",
+      data: {
+        _test: true,
+        event: null,
+        merchantId: "toycker_india_fc1e44",
+      },
+    }
+
+    expect(extractTrivaraOrderId(payload)).toBeNull()
+    expect(extractTrivaraOrderStatus(payload)).toBeNull()
+    expect(extractTrivaraShipmentDetails(payload)).toEqual({
+      awb: null,
+      courierName: null,
+      shipmentId: null,
+      shipmentStatus: null,
+      trackingUrl: null,
+    })
+  })
   it("treats Trivara business errors as failed New Order responses", async () => {
     const fetcher = vi.fn(async (input: string | URL) => {
       if (String(input).endsWith("/merchant-api-keys/token")) {

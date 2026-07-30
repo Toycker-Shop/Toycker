@@ -478,26 +478,95 @@ function getStringValue(value: unknown): string | null {
   return trimmed || null
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value)
+}
+
+function getStringOrNumberValue(value: unknown): string | null {
+  if (typeof value === "string" && value.trim()) {
+    return value.trim()
+  }
+
+  if (typeof value === "number") {
+    return String(value)
+  }
+
+  return null
+}
+
+function extractRecordString(
+  value: Record<string, unknown> | null,
+  candidateKeys: string[]
+): string | null {
+  if (!value) {
+    return null
+  }
+
+  for (const key of candidateKeys) {
+    const nestedValue = getStringOrNumberValue(value[key])
+
+    if (nestedValue) {
+      return nestedValue
+    }
+  }
+
+  return null
+}
+
 function getTrivaraDataRecord(
   value: Record<string, unknown> | null
 ): Record<string, unknown> | null {
   const data = value?.data
 
-  if (data && typeof data === "object" && !Array.isArray(data)) {
-    return data as Record<string, unknown>
+  if (isRecord(data)) {
+    return data
   }
 
   if (Array.isArray(data)) {
-    const firstRecord = data.find(
-      (item): item is Record<string, unknown> =>
-        Boolean(item) && typeof item === "object" && !Array.isArray(item)
-    )
+    const firstRecord = data.find(isRecord)
 
     return firstRecord || null
   }
 
   return null
 }
+
+function getTrivaraOrderRecord(
+  value: Record<string, unknown> | null
+): Record<string, unknown> | null {
+  const dataRecord = getTrivaraDataRecord(value)
+
+  if (!dataRecord) {
+    return null
+  }
+
+  if (isRecord(dataRecord.order)) {
+    return dataRecord.order
+  }
+
+  return dataRecord
+}
+
+function getTrivaraShipmentRecord(
+  value: Record<string, unknown> | null
+): Record<string, unknown> | null {
+  const dataRecord = getTrivaraDataRecord(value)
+
+  if (!dataRecord) {
+    return null
+  }
+
+  if (isRecord(dataRecord.order)) {
+    return dataRecord.order
+  }
+
+  if (isRecord(dataRecord.shipment)) {
+    return dataRecord.shipment
+  }
+
+  return dataRecord
+}
+
 function extractTrivaraPayloadString(
   value: Record<string, unknown>,
   candidateKeys: string[]
@@ -519,14 +588,10 @@ function extractTrivaraPayloadString(
     const record = current as Record<string, unknown>
 
     for (const key of candidateKeys) {
-      const nestedValue = record[key]
+      const nestedValue = getStringOrNumberValue(record[key])
 
-      if (typeof nestedValue === "string" && nestedValue.trim()) {
-        return nestedValue.trim()
-      }
-
-      if (typeof nestedValue === "number") {
-        return String(nestedValue)
+      if (nestedValue) {
+        return nestedValue
       }
     }
 
@@ -540,6 +605,126 @@ function extractTrivaraPayloadString(
   return null
 }
 
+const TRIVARA_ORDER_ID_KEYS = [
+  "orderId",
+  "order_id",
+  "trivaraOrderId",
+  "trivara_order_id",
+  "orderNumber",
+  "order_number",
+  "orderNo",
+  "order_no",
+  "referenceNumber",
+  "reference_number",
+]
+
+const TRIVARA_EXTERNAL_ORDER_ID_KEYS = [
+  "externalOrderId",
+  "external_order_id",
+  "channelOrderId",
+  "channel_order_id",
+  "clientOrderId",
+  "client_order_id",
+  "merchantOrderId",
+  "merchant_order_id",
+  "referenceOrderId",
+  "reference_order_id",
+  "sellerOrderId",
+  "seller_order_id",
+  "sellerOrderNumber",
+  "seller_order_number",
+  "channelOrderNumber",
+  "channel_order_number",
+  "externalOrderNumber",
+  "external_order_number",
+]
+
+const TRIVARA_API_ORDER_ID_KEYS = [
+  "id",
+  "_id",
+  "apiOrderId",
+  "api_order_id",
+  "trivaraApiOrderId",
+  "trivara_api_order_id",
+  "internalOrderId",
+  "internal_order_id",
+]
+
+const TRIVARA_ORDER_STATUS_KEYS = [
+  "orderStatus",
+  "order_status",
+  "shipmentStatus",
+  "shipment_status",
+  "trackingStatus",
+  "tracking_status",
+  "currentStatus",
+  "current_status",
+  "status",
+]
+
+const TRIVARA_AWB_KEYS = [
+  "awb",
+  "awbNumber",
+  "awb_number",
+  "awbNo",
+  "awb_no",
+  "waybill",
+  "waybillNumber",
+  "waybill_number",
+  "waybillNo",
+  "waybill_no",
+  "trackingNumber",
+  "tracking_number",
+  "trackingNo",
+  "tracking_no",
+  "trackingCode",
+  "tracking_code",
+]
+
+const TRIVARA_COURIER_KEYS = [
+  "courierName",
+  "courier_name",
+  "courier",
+  "carrierName",
+  "carrier_name",
+  "carrier",
+  "logisticsPartner",
+  "logistics_partner",
+  "shippingPartner",
+  "shipping_partner",
+]
+
+const TRIVARA_SHIPMENT_ID_KEYS = [
+  "shipmentId",
+  "shipment_id",
+  "shipmentID",
+  "shipmentNo",
+  "shipment_no",
+  "shipmentNumber",
+  "shipment_number",
+]
+
+const TRIVARA_SHIPMENT_STATUS_KEYS = [
+  "shipmentStatus",
+  "shipment_status",
+  "trackingStatus",
+  "tracking_status",
+  "currentStatus",
+  "current_status",
+  "status",
+]
+
+const TRIVARA_TRACKING_URL_KEYS = [
+  "trackingUrl",
+  "tracking_url",
+  "trackingLink",
+  "tracking_link",
+  "trackUrl",
+  "track_url",
+  "publicUrl",
+  "public_url",
+]
+
 export function extractTrivaraOrderId(
   value: Record<string, unknown> | null
 ): string | null {
@@ -548,18 +733,9 @@ export function extractTrivaraOrderId(
   }
 
   return (
-    extractTrivaraPayloadString(value, [
-      "orderId",
-      "order_id",
-      "trivaraOrderId",
-      "trivara_order_id",
-      "orderNumber",
-      "order_number",
-      "orderNo",
-      "order_no",
-      "referenceNumber",
-      "reference_number",
-    ]) || extractTrivaraApiOrderId(value)
+    extractRecordString(getTrivaraOrderRecord(value), TRIVARA_ORDER_ID_KEYS) ||
+    extractTrivaraPayloadString(value, TRIVARA_ORDER_ID_KEYS) ||
+    extractTrivaraApiOrderId(value)
   )
 }
 
@@ -570,26 +746,12 @@ export function extractTrivaraExternalOrderId(
     return null
   }
 
-  return extractTrivaraPayloadString(value, [
-    "externalOrderId",
-    "external_order_id",
-    "channelOrderId",
-    "channel_order_id",
-    "clientOrderId",
-    "client_order_id",
-    "merchantOrderId",
-    "merchant_order_id",
-    "referenceOrderId",
-    "reference_order_id",
-    "sellerOrderId",
-    "seller_order_id",
-    "sellerOrderNumber",
-    "seller_order_number",
-    "channelOrderNumber",
-    "channel_order_number",
-    "externalOrderNumber",
-    "external_order_number",
-  ])
+  return (
+    extractRecordString(
+      getTrivaraOrderRecord(value),
+      TRIVARA_EXTERNAL_ORDER_ID_KEYS
+    ) || extractTrivaraPayloadString(value, TRIVARA_EXTERNAL_ORDER_ID_KEYS)
+  )
 }
 
 export function extractToyckerOrderIdFromTrivaraExternalId(
@@ -605,6 +767,7 @@ export function extractToyckerOrderIdFromTrivaraExternalId(
     ? trimmed.slice("toycker_".length)
     : trimmed
 }
+
 export function extractTrivaraApiOrderId(
   value: Record<string, unknown> | null
 ): string | null {
@@ -612,16 +775,18 @@ export function extractTrivaraApiOrderId(
     return null
   }
 
-  return extractTrivaraPayloadString(value, [
-    "id",
-    "_id",
-    "apiOrderId",
-    "api_order_id",
-    "trivaraApiOrderId",
-    "trivara_api_order_id",
-    "internalOrderId",
-    "internal_order_id",
-  ])
+  return (
+    extractRecordString(getTrivaraOrderRecord(value), TRIVARA_API_ORDER_ID_KEYS) ||
+    extractRecordString(getTrivaraDataRecord(value), TRIVARA_API_ORDER_ID_KEYS) ||
+    extractTrivaraPayloadString(value, [
+      "apiOrderId",
+      "api_order_id",
+      "trivaraApiOrderId",
+      "trivara_api_order_id",
+      "internalOrderId",
+      "internal_order_id",
+    ])
+  )
 }
 
 export function extractTrivaraWebhookEventName(
@@ -658,6 +823,7 @@ export function extractTrivaraMerchantId(
     "account_id",
   ])
 }
+
 export function extractTrivaraOrderStatus(
   value: Record<string, unknown> | null
 ): string | null {
@@ -665,17 +831,8 @@ export function extractTrivaraOrderStatus(
     return null
   }
 
-  const dataRecord = getTrivaraDataRecord(value)
-  const dataStatus = dataRecord
-    ? extractTrivaraPayloadString(dataRecord, [
-        "orderStatus",
-        "order_status",
-        "status",
-      ])
-    : null
-
   return (
-    dataStatus ||
+    extractRecordString(getTrivaraOrderRecord(value), TRIVARA_ORDER_STATUS_KEYS) ||
     extractTrivaraPayloadString(value, [
       "orderStatus",
       "order_status",
@@ -691,24 +848,10 @@ export function extractTrivaraAwb(
     return null
   }
 
-  return extractTrivaraPayloadString(value, [
-    "awb",
-    "awbNumber",
-    "awb_number",
-    "awbNo",
-    "awb_no",
-    "waybill",
-    "waybillNumber",
-    "waybill_number",
-    "waybillNo",
-    "waybill_no",
-    "trackingNumber",
-    "tracking_number",
-    "trackingNo",
-    "tracking_no",
-    "trackingCode",
-    "tracking_code",
-  ])
+  return (
+    extractRecordString(getTrivaraShipmentRecord(value), TRIVARA_AWB_KEYS) ||
+    extractTrivaraPayloadString(value, TRIVARA_AWB_KEYS)
+  )
 }
 
 export function extractTrivaraCourierName(
@@ -718,18 +861,10 @@ export function extractTrivaraCourierName(
     return null
   }
 
-  return extractTrivaraPayloadString(value, [
-    "courierName",
-    "courier_name",
-    "courier",
-    "carrierName",
-    "carrier_name",
-    "carrier",
-    "logisticsPartner",
-    "logistics_partner",
-    "shippingPartner",
-    "shipping_partner",
-  ])
+  return (
+    extractRecordString(getTrivaraShipmentRecord(value), TRIVARA_COURIER_KEYS) ||
+    extractTrivaraPayloadString(value, TRIVARA_COURIER_KEYS)
+  )
 }
 
 export function extractTrivaraShipmentId(
@@ -739,15 +874,10 @@ export function extractTrivaraShipmentId(
     return null
   }
 
-  return extractTrivaraPayloadString(value, [
-    "shipmentId",
-    "shipment_id",
-    "shipmentID",
-    "shipmentNo",
-    "shipment_no",
-    "shipmentNumber",
-    "shipment_number",
-  ])
+  return (
+    extractRecordString(getTrivaraShipmentRecord(value), TRIVARA_SHIPMENT_ID_KEYS) ||
+    extractTrivaraPayloadString(value, TRIVARA_SHIPMENT_ID_KEYS)
+  )
 }
 
 export function extractTrivaraShipmentStatus(
@@ -757,14 +887,12 @@ export function extractTrivaraShipmentStatus(
     return null
   }
 
-  return extractTrivaraPayloadString(value, [
-    "shipmentStatus",
-    "shipment_status",
-    "trackingStatus",
-    "tracking_status",
-    "currentStatus",
-    "current_status",
-  ])
+  return (
+    extractRecordString(
+      getTrivaraShipmentRecord(value),
+      TRIVARA_SHIPMENT_STATUS_KEYS
+    ) || extractTrivaraPayloadString(value, TRIVARA_SHIPMENT_STATUS_KEYS)
+  )
 }
 
 export function extractTrivaraTrackingUrl(
@@ -774,16 +902,10 @@ export function extractTrivaraTrackingUrl(
     return null
   }
 
-  return extractTrivaraPayloadString(value, [
-    "trackingUrl",
-    "tracking_url",
-    "trackingLink",
-    "tracking_link",
-    "trackUrl",
-    "track_url",
-    "publicUrl",
-    "public_url",
-  ])
+  return (
+    extractRecordString(getTrivaraShipmentRecord(value), TRIVARA_TRACKING_URL_KEYS) ||
+    extractTrivaraPayloadString(value, TRIVARA_TRACKING_URL_KEYS)
+  )
 }
 
 export function extractTrivaraShipmentDetails(
@@ -797,7 +919,6 @@ export function extractTrivaraShipmentDetails(
     trackingUrl: extractTrivaraTrackingUrl(value),
   }
 }
-
 export function getTrivaraResponseBusinessError(
   value: Record<string, unknown> | null
 ): string | null {

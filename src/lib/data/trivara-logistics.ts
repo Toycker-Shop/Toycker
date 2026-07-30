@@ -573,6 +573,69 @@ async function updateTrivaraWebhookEvent(
   }
 }
 
+async function getBookingByOrderId(
+  supabase: AdminSupabaseClient,
+  orderId: string
+): Promise<TrivaraOrderBooking | null> {
+  const { data, error } = await supabase
+    .from("trivara_order_bookings")
+    .select("*")
+    .eq("order_id", orderId)
+    .maybeSingle()
+
+  if (error) {
+    throw new Error(error.message)
+  }
+
+  return data ? (data as TrivaraOrderBooking) : null
+}
+
+async function findBookingByWebhookAwb(
+  supabase: AdminSupabaseClient,
+  awb: string | null
+): Promise<TrivaraOrderBooking | null> {
+  if (!awb) {
+    return null
+  }
+
+  const { data: order, error: orderError } = await supabase
+    .from("orders")
+    .select("id")
+    .eq("tracking_number", awb)
+    .maybeSingle()
+
+  if (orderError) {
+    throw new Error(orderError.message)
+  }
+
+  const orderRow = order as { id: string } | null
+
+  if (!orderRow?.id) {
+    return null
+  }
+
+  return getBookingByOrderId(supabase, orderRow.id)
+}
+
+function hasUsefulTrivaraWebhookPayload(
+  payload: Record<string, unknown>
+): boolean {
+  const shipmentDetails = extractTrivaraShipmentDetails(payload)
+  const normalizedStatus = extractTrivaraOrderStatus(payload)?.trim().toLowerCase()
+  const hasLifecycleStatus = Boolean(
+    normalizedStatus && !["success", "ok"].includes(normalizedStatus)
+  )
+
+  return Boolean(
+    hasLifecycleStatus ||
+      shipmentDetails.awb ||
+      shipmentDetails.courierName ||
+      shipmentDetails.shipmentId ||
+      shipmentDetails.shipmentStatus ||
+      shipmentDetails.trackingUrl
+  )
+}
+
 async function findBookingByWebhookPayload(
   supabase: AdminSupabaseClient,
   payload: Record<string, unknown>
@@ -584,18 +647,10 @@ async function findBookingByWebhookPayload(
     toyckerOrderId &&
     (externalOrderId?.startsWith("toycker_") || isLikelyUuid(toyckerOrderId))
   ) {
-    const { data, error } = await supabase
-      .from("trivara_order_bookings")
-      .select("*")
-      .eq("order_id", toyckerOrderId)
-      .maybeSingle()
+    const booking = await getBookingByOrderId(supabase, toyckerOrderId)
 
-    if (error) {
-      throw new Error(error.message)
-    }
-
-    if (data) {
-      return data as TrivaraOrderBooking
+    if (booking) {
+      return booking
     }
   }
 
@@ -614,6 +669,14 @@ async function findBookingByWebhookPayload(
     if (data) {
       return data as TrivaraOrderBooking
     }
+  }
+
+  const bookingByAwb = await findBookingByWebhookAwb(
+    supabase,
+    extractTrivaraShipmentDetails(payload).awb
+  )
+  if (bookingByAwb) {
+    return bookingByAwb
   }
 
   const apiOrderId = extractTrivaraApiOrderId(payload)
@@ -977,20 +1040,35 @@ export async function processTrivaraWebhookPayload(
     }
   }
 
-  const remoteResult = await syncTrivaraBookingFromRemote({
-    supabase,
-    booking,
-    source: "webhook",
-    triggerPayload: payload,
-  })
-  const fallbackResult = remoteResult.ok
-    ? remoteResult
-    : await applyTrivaraPayloadToBooking({
+  const shouldApplyPayloadFirst = hasUsefulTrivaraWebhookPayload(payload)
+  const primaryResult = shouldApplyPayloadFirst
+    ? await applyTrivaraPayloadToBooking({
         supabase,
         booking,
         payload,
         source: "webhook",
       })
+    : await syncTrivaraBookingFromRemote({
+        supabase,
+        booking,
+        source: "webhook",
+        triggerPayload: payload,
+      })
+  const fallbackResult = primaryResult.ok
+    ? primaryResult
+    : shouldApplyPayloadFirst
+      ? await syncTrivaraBookingFromRemote({
+          supabase,
+          booking,
+          source: "webhook",
+          triggerPayload: payload,
+        })
+      : await applyTrivaraPayloadToBooking({
+          supabase,
+          booking,
+          payload,
+          source: "webhook",
+        })
 
   await updateTrivaraWebhookEvent(supabase, eventId, {
     status: fallbackResult.ok ? "processed" : "failed",
