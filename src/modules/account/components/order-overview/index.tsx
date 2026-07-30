@@ -5,13 +5,17 @@ import { Button } from "@modules/common/components/button"
 import OrderCard from "../order-card"
 import LocalizedClientLink from "@modules/common/components/localized-client-link"
 import { AccountOrderSummary } from "@lib/data/orders"
+import { RealtimeOrderManager } from "@modules/common/components/realtime-order-manager"
 
 const OrderOverview = ({ orders }: { orders: AccountOrderSummary[] }) => {
   if (orders?.length) {
     return (
       <div className="flex flex-col gap-4 w-full">
         {orders.map((o) => (
-          <OrderCard key={o.id} order={o} />
+          <div key={o.id}>
+            <RealtimeOrderManager orderId={o.id} />
+            <OrderCard order={o} />
+          </div>
         ))}
       </div>
     )

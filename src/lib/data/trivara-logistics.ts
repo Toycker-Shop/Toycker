@@ -26,7 +26,14 @@ import {
   sendTrivaraGetOrder,
   sendTrivaraGetShipment,
 } from "@/lib/integrations/trivara"
-import { cancelOrder, ensureAdmin, logOrderEvent, retryTrivaraBookingForOrder } from "./admin"
+import {
+  autoFulfillOrderFromTrivara,
+  autoMarkOrderDeliveredFromTrivara,
+  cancelOrder,
+  ensureAdmin,
+  logOrderEvent,
+  retryTrivaraBookingForOrder,
+} from "./admin"
 import {
   hasTrivaraFulfillmentDetails,
   mergeTrivaraFulfillmentMetadata,
@@ -352,10 +359,18 @@ export async function getTrivaraLogisticsRecord(
   }
 }
 
+function normalizeTrivaraLifecycleStatus(status: string | null): string {
+  return status?.trim().toLowerCase().replace(/[\s-]+/g, "_") || ""
+}
+
 function isCancelledTrivaraStatus(status: string | null): boolean {
-  const normalized = status?.trim().toLowerCase() || ""
+  const normalized = normalizeTrivaraLifecycleStatus(status)
 
   return normalized === "cancelled" || normalized === "canceled"
+}
+
+function isDeliveredTrivaraStatus(status: string | null): boolean {
+  return normalizeTrivaraLifecycleStatus(status) === "delivered"
 }
 
 type TrivaraCancellationSyncSource = "manual_sync" | "webhook" | "fallback"
@@ -798,6 +813,26 @@ async function storeTrivaraTrackingSync(params: {
     params.shipmentDetails,
     params.syncedAt
   )
+
+  await autoFulfillOrderFromTrivara(params.booking.order_id, {
+    ...params.shipmentDetails,
+    syncedAt: params.syncedAt,
+  })
+
+  const currentShipmentStatus =
+    params.shipmentDetails.shipmentStatus || params.remoteStatus
+
+  if (isDeliveredTrivaraStatus(currentShipmentStatus)) {
+    await autoMarkOrderDeliveredFromTrivara(params.booking.order_id, {
+      trivara_order_id:
+        params.visibleTrivaraOrderId || params.booking.trivara_order_id,
+      trivara_status: currentShipmentStatus,
+      awb: params.shipmentDetails.awb,
+      courier: params.shipmentDetails.courierName,
+      shipment_id: params.shipmentDetails.shipmentId,
+      synced_at: params.syncedAt,
+    })
+  }
 }
 
 async function storeTrivaraCancellationSync(params: {

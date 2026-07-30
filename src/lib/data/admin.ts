@@ -1,4 +1,4 @@
-﻿"use server"
+"use server"
 
 import { createClient } from "@/lib/supabase/server"
 import { createAdminClient } from "@/lib/supabase/admin"
@@ -105,6 +105,17 @@ type OrderDisplayRow = {
   id: string
   display_id: number
 }
+
+type TrivaraAutoFulfillmentDetails = {
+  awb: string | null
+  courierName: string | null
+  shipmentId: string | null
+  shipmentStatus: string | null
+  trackingUrl: string | null
+  syncedAt: string
+}
+
+type OrderDeliverySource = "admin" | "trivara"
 
 export type AdminOrderNavigation = {
   olderOrder: OrderDisplayRow | null
@@ -4019,61 +4030,146 @@ async function creditRewardsOnDelivery(order: {
   }
 }
 
-export async function markOrderAsDelivered(orderId: string) {
-  await ensureAdmin()
-  const supabase = await createClient()
-  const actorDisplay = await getAdminActorDisplay()
+function isCodPaymentMethod(paymentMethod: string | null | undefined): boolean {
+  const normalizedMethod = (paymentMethod || "").toLowerCase()
 
-  const { data: order } = await supabase
-    .from("orders")
-    .select(
-      "id, user_id, subtotal, total, payment_method, payment_status, metadata"
-    )
-    .eq("id", orderId)
-    .maybeSingle()
-
-  if (!order) throw new Error("Order not found")
-
-  const normalizedMethod = (order.payment_method || "").toLowerCase()
-  const isCod =
+  return (
     normalizedMethod.includes("cod") ||
     normalizedMethod.includes("cash") ||
     normalizedMethod.includes("pp_system_default") ||
     normalizedMethod === "manual"
+  )
+}
 
-  const { error } = await supabase
+type DeliveryOrderRow = Pick<
+  Order,
+  "id" | "user_id" | "subtotal" | "total" | "payment_method" | "payment_status" | "metadata" | "status"
+>
+
+async function markOrderDeliveredWithSideEffects(
+  orderId: string,
+  options: {
+    source: OrderDeliverySource
+    actor: string
+    actorDisplay?: string
+    description: string
+    metadata?: Record<string, unknown>
+    requireShippedStatus: boolean
+    throwIfMissing: boolean
+  }
+) {
+  const adminSupabase = await createAdminClient()
+  const { data: order, error: fetchError } = await adminSupabase
+    .from("orders")
+    .select("id, user_id, subtotal, total, payment_method, payment_status, metadata, status")
+    .eq("id", orderId)
+    .maybeSingle()
+
+  if (fetchError) {
+    throw new Error(fetchError.message)
+  }
+
+  if (!order) {
+    if (options.throwIfMissing) {
+      throw new Error("Order not found")
+    }
+
+    return { success: false, skipped: true, reason: "missing_order" }
+  }
+
+  const deliveryOrder = order as DeliveryOrderRow
+
+  if (deliveryOrder.status === "delivered") {
+    return { success: true, alreadyDelivered: true }
+  }
+
+  if (["cancelled", "failed"].includes(deliveryOrder.status)) {
+    return { success: false, skipped: true, reason: "inactive_order" }
+  }
+
+  if (options.requireShippedStatus && deliveryOrder.status !== "shipped") {
+    return { success: false, skipped: true, reason: "not_shipped" }
+  }
+
+  const isCod = isCodPaymentMethod(deliveryOrder.payment_method)
+  const deliveredAt = new Date().toISOString()
+  const updateQuery = adminSupabase
     .from("orders")
     .update({
       status: "delivered",
       fulfillment_status: "delivered",
-      payment_status: isCod ? "captured" : order.payment_status,
-      updated_at: new Date().toISOString(),
+      payment_status: isCod ? "captured" : deliveryOrder.payment_status,
+      updated_at: deliveredAt,
     })
     .eq("id", orderId)
 
-  if (error) throw error
+  const { error: updateError } = options.requireShippedStatus
+    ? await updateQuery.eq("status", "shipped")
+    : await updateQuery
+
+  if (updateError) {
+    throw new Error(updateError.message)
+  }
 
   const { syncClubMembershipForOrder } = await import("@lib/data/club")
   await syncClubMembershipForOrder(orderId, "order_delivered")
-
-  // Credit reward points to club members (idempotent)
-  await creditRewardsOnDelivery(order)
+  await creditRewardsOnDelivery({
+    id: deliveryOrder.id,
+    user_id: deliveryOrder.user_id ?? null,
+    subtotal: deliveryOrder.subtotal,
+    total: deliveryOrder.total,
+    metadata: deliveryOrder.metadata,
+  })
 
   await logOrderEvent(
     orderId,
     "delivered",
-    "Order Delivered",
-    isCod
-      ? "Order delivered. Payment marked as paid."
-      : "Order has been successfully delivered to the customer.",
-    "admin",
-    {},
-    actorDisplay
+    options.source === "trivara" ? "Order Delivered by Trivara" : "Order Delivered",
+    options.description,
+    options.actor,
+    options.metadata || {},
+    options.actorDisplay
   )
 
   revalidatePath(`/admin/orders/${orderId}`)
   revalidatePath("/admin/orders")
+  revalidatePath(`/order/confirmed/${orderId}`)
+  revalidatePath(`/account/orders/details/${orderId}`)
   revalidateTag("rewards", "max")
+
+  return { success: true }
+}
+
+export async function markOrderAsDelivered(orderId: string) {
+  await ensureAdmin()
+  const actorDisplay = await getAdminActorDisplay()
+
+  return markOrderDeliveredWithSideEffects(orderId, {
+    source: "admin",
+    actor: "admin",
+    actorDisplay,
+    description: "Order has been successfully delivered to the customer.",
+    requireShippedStatus: false,
+    throwIfMissing: true,
+  })
+}
+
+export async function autoMarkOrderDeliveredFromTrivara(
+  orderId: string,
+  metadata: Record<string, unknown> = {}
+) {
+  return markOrderDeliveredWithSideEffects(orderId, {
+    source: "trivara",
+    actor: "Trivara Logistics",
+    description: "Trivara marked this shipment as delivered, so Toycker automatically marked the order as delivered.",
+    metadata: {
+      provider: "trivara",
+      source: "trivara_sync",
+      ...metadata,
+    },
+    requireShippedStatus: true,
+    throwIfMissing: false,
+  })
 }
 
 export async function cancelOrder(orderId: string) {
@@ -4325,6 +4421,109 @@ export async function markOrderAsPaid(orderId: string) {
 }
 
 // --- Order Fulfillment ---
+export async function autoFulfillOrderFromTrivara(
+  orderId: string,
+  details: TrivaraAutoFulfillmentDetails
+) {
+  const awbNumber = details.awb?.trim() || ""
+  if (!awbNumber) {
+    return { success: false, skipped: true, reason: "missing_awb" }
+  }
+
+  const adminSupabase = await createAdminClient()
+  const { data: orderRow, error: orderFetchError } = await adminSupabase
+    .from("orders")
+    .select("status, metadata")
+    .eq("id", orderId)
+    .maybeSingle()
+
+  if (orderFetchError) {
+    throw new Error(orderFetchError.message)
+  }
+
+  if (!orderRow) {
+    return { success: false, skipped: true, reason: "missing_order" }
+  }
+
+  const order = orderRow as {
+    status: Order["status"]
+    metadata: Record<string, unknown> | null
+  }
+
+  if (order.status === "shipped" || order.status === "delivered") {
+    return { success: true, alreadyFulfilled: true }
+  }
+
+  if (order.status !== "accepted") {
+    return { success: false, skipped: true, reason: "not_accepted" }
+  }
+
+  const { data: partner, error: partnerError } = await adminSupabase
+    .from("shipping_partners")
+    .select("id, name")
+    .eq("is_active", true)
+    .ilike("name", "Trivara Logistics")
+    .maybeSingle()
+
+  if (partnerError) {
+    throw new Error(partnerError.message)
+  }
+
+  if (!partner) {
+    return { success: false, skipped: true, reason: "missing_trivara_partner" }
+  }
+
+  const fulfilledAt = details.syncedAt || new Date().toISOString()
+  const { error: updateError } = await adminSupabase
+    .from("orders")
+    .update({
+      status: "shipped",
+      fulfillment_status: "shipped",
+      shipping_partner_id: partner.id,
+      tracking_number: awbNumber,
+      metadata: mergeTrivaraFulfillmentMetadata(order.metadata, {
+        awb: awbNumber,
+        courierName: details.courierName,
+        shipmentId: details.shipmentId,
+        shipmentStatus: details.shipmentStatus,
+        trackingUrl: details.trackingUrl,
+        syncedAt: fulfilledAt,
+      }),
+      updated_at: fulfilledAt,
+    })
+    .eq("id", orderId)
+    .eq("status", "accepted")
+
+  if (updateError) {
+    throw new Error(updateError.message)
+  }
+
+  await logOrderEvent(
+    orderId,
+    "shipped",
+    "Order Auto-Fulfilled from Trivara",
+    `Trivara generated AWB ${awbNumber}${details.courierName ? ` via ${details.courierName}` : ""}, so Toycker automatically marked this order as shipped.`,
+    "Trivara Logistics",
+    {
+      provider: "trivara",
+      source: "trivara_sync",
+      shipping_partner: partner.name,
+      tracking_number: awbNumber,
+      awb: awbNumber,
+      courier: details.courierName,
+      shipment_id: details.shipmentId,
+      shipment_status: details.shipmentStatus,
+    }
+  )
+
+  revalidatePath(`/admin/orders/${orderId}`)
+  revalidatePath("/admin/orders")
+  revalidatePath(`/order/confirmed/${orderId}`)
+  revalidatePath(`/account/orders/details/${orderId}`)
+
+  return { success: true }
+}
+
 export async function fulfillOrder(orderId: string, formData: FormData) {
   await ensureAdmin()
   const supabase = await createClient()
