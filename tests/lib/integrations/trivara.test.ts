@@ -1,44 +1,55 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
+vi.mock("server-only", () => ({}))
+
 import {
-  buildTrivaraOrderBookingPayload,
-  extractTrivaraReferenceNumber,
-  extractTrivaraTrackingStatus,
-  extractTrivaraWaybillNumber,
-  getTrivaraApiBaseUrl,
-  getTrivaraConfig,
-  sendTrivaraCancelOrder,
-  sendTrivaraOrderTracking,
-  sendTrivaraPickupLocations,
-  sendTrivaraPrintSlip,
-  sendTrivaraServices,
-  sendTrivaraTotalOrders,
-  sendTrivaraOrderBooking,
-  TrivaraConfig,
+  buildTrivaraNewOrderPayload,
+  extractTrivaraApiOrderId,
+  extractTrivaraExternalOrderId,
+  extractToyckerOrderIdFromTrivaraExternalId,
+  extractTrivaraOrderId,
+  extractTrivaraOrderStatus,
+  extractTrivaraMerchantId,
+  extractTrivaraWebhookEventName,
+  extractTrivaraShipmentDetails,
+  getTrivaraNewApiConfig,
+  getTrivaraResponseBusinessError,
+  sendTrivaraCancelNewOrder,
+  sendTrivaraGetOrder,
+  sendTrivaraGetShipment,
+  sendTrivaraNewOrder,
+  TrivaraNewApiConfig,
 } from "@/lib/integrations/trivara"
 import { Order } from "@/lib/supabase/types"
+import {
+  getTrivaraWebhookAuthToken,
+  verifyTrivaraWebhookAuthorization,
+} from "@/lib/integrations/trivara-webhook"
 
-const config: Pick<
-  TrivaraConfig,
-  | "crnNo"
-  | "warehouseName"
-  | "service"
-  | "shipmentType"
-  | "servicePartnerId"
-  | "defaultWeightGrams"
+const newOrderConfig: Pick<
+  TrivaraNewApiConfig,
+  | "pickupAddressId"
+  | "channelName"
+  | "defaultWeightKg"
   | "defaultLengthCm"
   | "defaultWidthCm"
   | "defaultHeightCm"
 > = {
-  crnNo: "868369",
-  warehouseName: "DOMINANT_INFOTECH_101380",
-  service: "SURFACE",
-  shipmentType: "PARCEL",
-  servicePartnerId: 1,
-  defaultWeightGrams: 500,
+  pickupAddressId: "pickup-123",
+  channelName: "Toycker",
+  defaultWeightKg: 0.5,
   defaultLengthCm: 20,
   defaultWidthCm: 15,
   defaultHeightCm: 10,
+}
+
+const authConfig: Pick<
+  TrivaraNewApiConfig,
+  "apiBaseUrl" | "apiKeyId" | "apiSecret"
+> = {
+  apiBaseUrl: "https://api-new.trivaralogistics.com",
+  apiKeyId: "key-id-1",
+  apiSecret: "secret-1",
 }
 
 const buildOrder = (overrides: Partial<Order> = {}): Order => ({
@@ -103,7 +114,7 @@ const buildOrder = (overrides: Partial<Order> = {}): Order => ({
   ...overrides,
 })
 
-describe("Trivara order booking integration", () => {
+describe("Trivara new dashboard integration", () => {
   const originalEnv = process.env
 
   beforeEach(() => {
@@ -114,58 +125,205 @@ describe("Trivara order booking integration", () => {
     process.env = originalEnv
   })
 
-  it("builds V2 COD payload from Toycker order data", () => {
-    const payload = buildTrivaraOrderBookingPayload(buildOrder(), config)
+
+  it("extracts Toycker external order IDs from nested webhook payloads", () => {
+    const payload = {
+      event: "order.updated",
+      data: {
+        order: {
+          externalOrderId: "toycker_274fa7f8-8153-40e9-9881-70afe97e541d",
+        },
+      },
+    }
+
+    const externalOrderId = extractTrivaraExternalOrderId(payload)
+
+    expect(externalOrderId).toBe(
+      "toycker_274fa7f8-8153-40e9-9881-70afe97e541d"
+    )
+    expect(extractToyckerOrderIdFromTrivaraExternalId(externalOrderId)).toBe(
+      "274fa7f8-8153-40e9-9881-70afe97e541d"
+    )
+  })
+
+  it("keeps unprefixed external order IDs usable for webhook matching", () => {
+    expect(
+      extractToyckerOrderIdFromTrivaraExternalId(
+        "274fa7f8-8153-40e9-9881-70afe97e541d"
+      )
+    ).toBe("274fa7f8-8153-40e9-9881-70afe97e541d")
+  })
+
+  it("extracts Trivara webhook identifiers from alternate field names", () => {
+    const payload = {
+      eventType: "order.shipped",
+      merchant_id: "merchant-1",
+      data: {
+        seller_order_id: "toycker_ord_1275ce87-4a72-453d-86a7-4fb2b7edf612",
+        trivaraOrderId: "TRV-000007",
+        trivaraApiOrderId: "cms4acq1u00522gpczleou6nm",
+      },
+    }
+
+    expect(extractTrivaraWebhookEventName(payload)).toBe("order.shipped")
+    expect(extractTrivaraMerchantId(payload)).toBe("merchant-1")
+    expect(extractTrivaraExternalOrderId(payload)).toBe(
+      "toycker_ord_1275ce87-4a72-453d-86a7-4fb2b7edf612"
+    )
+    expect(extractTrivaraOrderId(payload)).toBe("TRV-000007")
+    expect(extractTrivaraApiOrderId(payload)).toBe(
+      "cms4acq1u00522gpczleou6nm"
+    )
+  })
+  it("builds a New Order COD payload from Toycker order data", () => {
+    const payload = buildTrivaraNewOrderPayload(buildOrder(), newOrderConfig)
 
     expect(payload).toMatchObject({
-      warehouse_name: "DOMINANT_INFOTECH_101380",
-      service_partner_id: 1,
-      crn_no: "868369",
-      orders: [
+      customerName: "Customer Name",
+      customerPhone: "9898989898",
+      addressLine1: "Shop No 1",
+      addressLine2: "Prabhunagar, Hirabag Circle",
+      pincode: "395006",
+      city: "Surat",
+      state: "Gujarat",
+      paymentMode: "COD",
+      codAmount: 2500,
+      shippingCharges: 0,
+      discount: 0,
+      pickupAddressId: "pickup-123",
+      customerEmail: "buyer@example.com",
+      country: "IN",
+      dimensions: "20x15x10",
+      channelName: "Toycker",
+      externalOrderId: "toycker_order-1",
+      items: [
         {
-          user_reference_id: "toycker_order-1",
-          user_order_id: 1223,
-          consignee_name: "Customer Name",
-          mobile: "9898989898",
-          pincode: "395006",
-          address: "Shop No 1, Prabhunagar, Hirabag Circle",
-          payment_mode: "COD",
-          service: "SURFACE",
-          shipment_type: "PARCEL",
-          length: 20,
-          width: 15,
-          height: 10,
-          weight: 500,
-          email: "buyer@example.com",
-          total_amount: 2500,
-          total_cod_amount: 2500,
-          items: [
-            {
-              product_detail: "Toy Car",
-              package_amount: 2500,
-              product_sku: "1223-1",
-              quantity: 1,
-            },
-          ],
+          name: "Toy Car",
+          quantity: 1,
+          price: 2500,
+          sku: "1223-1",
+          weight: 0.5,
+          category: "Toys",
+          lengthCm: 20,
+          widthCm: 15,
+          heightCm: 10,
+        },
+      ],
+    })
+  })
+  it("sends COD final total, shipping, and decimal item prices to Trivara", () => {
+    const payload = buildTrivaraNewOrderPayload(
+      buildOrder({
+        total_amount: 134.05,
+        total: 134.05,
+        subtotal: 94.05,
+        shipping_total: 40,
+        discount_total: 0,
+        items: [
+          {
+            ...buildOrder().items![0],
+            title: "MINI MOSTER TRUCKS",
+            product_title: "MINI MOSTER TRUCKS",
+            unit_price: 94.05,
+            total: 94.05,
+            quantity: 1,
+          },
+        ],
+      }),
+      newOrderConfig
+    )
+
+    expect(payload).toMatchObject({
+      paymentMode: "COD",
+      codAmount: 134.05,
+      shippingCharges: 40,
+      discount: 0,
+      items: [
+        {
+          name: "MINI MOSTER TRUCKS",
+          quantity: 1,
+          price: 94.05,
+        },
+      ],
+    })
+  })
+
+  it("uses item unit price instead of line total when quantity is greater than one", () => {
+    const payload = buildTrivaraNewOrderPayload(
+      buildOrder({
+        total_amount: 228.1,
+        total: 228.1,
+        subtotal: 188.1,
+        shipping_total: 40,
+        items: [
+          {
+            ...buildOrder().items![0],
+            quantity: 2,
+            unit_price: 94.05,
+            total: 188.1,
+          },
+        ],
+      }),
+      newOrderConfig
+    )
+
+    expect(payload).toMatchObject({
+      codAmount: 228.1,
+      shippingCharges: 40,
+      items: [
+        {
+          quantity: 2,
+          price: 94.05,
+        },
+      ],
+    })
+  })
+
+  it("sends order-level discounts separately from the COD collection amount", () => {
+    const payload = buildTrivaraNewOrderPayload(
+      buildOrder({
+        total_amount: 180,
+        total: 180,
+        subtotal: 200,
+        discount_total: 20,
+        items: [
+          {
+            ...buildOrder().items![0],
+            unit_price: 200,
+            total: 200,
+          },
+        ],
+      }),
+      newOrderConfig
+    )
+
+    expect(payload).toMatchObject({
+      codAmount: 180,
+      shippingCharges: 0,
+      discount: 20,
+      items: [
+        {
+          price: 200,
         },
       ],
     })
   })
 
   it("builds prepaid payload for online paid orders", () => {
-    const payload = buildTrivaraOrderBookingPayload(
+    const payload = buildTrivaraNewOrderPayload(
       buildOrder({
         payment_method: "easebuzz",
         payment_status: "captured",
       }),
-      config
+      newOrderConfig
     )
 
-    expect(payload.orders[0]?.payment_mode).toBe("PREPAID")
+    expect(payload.paymentMode).toBe("Prepaid")
+    expect(payload.codAmount).toBe(0)
   })
 
   it("builds COD payload for Easebuzz partial payment orders with pending balance", () => {
-    const payload = buildTrivaraOrderBookingPayload(
+    const payload = buildTrivaraNewOrderPayload(
       buildOrder({
         payment_method: "pp_easebuzz_partial_payment",
         payment_status: "partially_paid",
@@ -179,16 +337,15 @@ describe("Trivara order booking integration", () => {
           balance_payment_status: "pending",
         },
       }),
-      config
+      newOrderConfig
     )
 
-    expect(payload.orders[0]?.payment_mode).toBe("COD")
-    expect(payload.orders[0]?.total_amount).toBe(2500)
-    expect(payload.orders[0]?.total_cod_amount).toBe(2000)
+    expect(payload.paymentMode).toBe("COD")
+    expect(payload.codAmount).toBe(2000)
   })
 
   it("builds prepaid payload for Easebuzz partial payment orders after balance is paid", () => {
-    const payload = buildTrivaraOrderBookingPayload(
+    const payload = buildTrivaraNewOrderPayload(
       buildOrder({
         payment_method: "pp_easebuzz_partial_payment",
         payment_status: "paid",
@@ -204,11 +361,11 @@ describe("Trivara order booking integration", () => {
           balance_payment_method: "Cash",
         },
       }),
-      config
+      newOrderConfig
     )
 
-    expect(payload.orders[0]?.payment_mode).toBe("PREPAID")
-    expect(payload.orders[0]?.total_cod_amount).toBe(0)
+    expect(payload.paymentMode).toBe("Prepaid")
+    expect(payload.codAmount).toBe(0)
   })
 
   it("rejects missing required shipping fields", () => {
@@ -219,425 +376,396 @@ describe("Trivara order booking integration", () => {
       },
     })
 
-    expect(() => buildTrivaraOrderBookingPayload(order, config)).toThrow(
-      "Shipping pincode is required for Trivara booking"
+    expect(() => buildTrivaraNewOrderPayload(order, newOrderConfig)).toThrow(
+      "Shipping pincode is required for Trivara New Order sync"
     )
   })
 
-  it("sends V2 JSON booking data to Trivara and extracts reference number", async () => {
-    let capturedUrl: string | URL | null = null
-    let capturedInit: RequestInit | undefined
-    const fetcher = vi.fn(async (input: string | URL, init?: RequestInit) => {
-      capturedUrl = input
-      capturedInit = init
+  it("reads new dashboard environment configuration", () => {
+    process.env.TRIVARA_ORDER_SYNC_ENABLED = "true"
+    process.env.TRIVARA_API_BASE_URL = "https://api-new.trivaralogistics.com"
+    process.env.TRIVARA_API_KEY_ID = "key-id-1"
+    process.env.TRIVARA_API_SECRET = "secret-1"
+    process.env.TRIVARA_PICKUP_ADDRESS_ID = "pickup-123"
+    process.env.TRIVARA_CHANNEL_NAME = "Toycker"
 
-      return new Response(
-        JSON.stringify({ reference_number: "857252P0000044" }),
-        { status: 200 }
+    expect(getTrivaraNewApiConfig()).toMatchObject({
+      orderSyncEnabled: true,
+      apiBaseUrl: "https://api-new.trivaralogistics.com",
+      apiKeyId: "key-id-1",
+      pickupAddressId: "pickup-123",
+      channelName: "Toycker",
+    })
+  })
+
+  it("requires new dashboard credentials when order sync is enabled", () => {
+    process.env.TRIVARA_ORDER_SYNC_ENABLED = "true"
+    process.env.TRIVARA_API_BASE_URL = "https://api-new.trivaralogistics.com"
+    process.env.TRIVARA_API_KEY_ID = "key-id-1"
+    process.env.TRIVARA_API_SECRET = ""
+
+    expect(() => getTrivaraNewApiConfig()).toThrow(
+      "Missing required environment variable: TRIVARA_API_SECRET"
+    )
+  })
+
+  it("accepts only the configured Trivara webhook bearer token", () => {
+    expect(
+      verifyTrivaraWebhookAuthorization(
+        "Bearer trivara_wh_12345678901234567890",
+        "trivara_wh_12345678901234567890"
       )
-    })
+    ).toEqual({ ok: true })
 
-    const payload = buildTrivaraOrderBookingPayload(buildOrder(), config)
-    const result = await sendTrivaraOrderBooking(
-      payload,
-      {
-        apiBaseUrl: "https://app.trivaralogistics.com",
-        apiKey: "secret-key",
-      },
-      fetcher
-    )
-
-    expect(String(capturedUrl)).toBe(
-      "https://app.trivaralogistics.com/api/users/V2/OrderBooking/create_order"
-    )
-    expect(capturedInit?.method).toBe("POST")
-    expect(capturedInit?.headers).toEqual({
-      Apikey: "secret-key",
-      "Content-Type": "application/json",
-    })
-    expect(JSON.parse(String(capturedInit?.body))).toMatchObject({
-      warehouse_name: "DOMINANT_INFOTECH_101380",
-      service_partner_id: 1,
-      crn_no: "868369",
-    })
-    expect(result).toMatchObject({
-      ok: true,
-      status: 200,
-      referenceNumber: "857252P0000044",
-      errorMessage: null,
-    })
-  })
-
-  it("extracts reference numbers from Trivara data array responses", async () => {
-    const fetcher = vi.fn(async () => {
-      return new Response(
-        JSON.stringify({
-          data: [
-            {
-              status: "SUCCESS",
-              message: "Order Created",
-              waybill: "46322610068051",
-              order_id: 6668,
-              reference_number: "260000015315",
-            },
-          ],
-          error: "",
-          result: "Processed",
-        }),
-        { status: 200 }
+    expect(
+      verifyTrivaraWebhookAuthorization(
+        "Bearer wrong-token",
+        "trivara_wh_12345678901234567890"
       )
-    })
+    ).toMatchObject({ ok: false })
+  })
 
-    const payload = buildTrivaraOrderBookingPayload(buildOrder(), config)
-    const result = await sendTrivaraOrderBooking(
-      payload,
-      {
-        apiBaseUrl: "https://app.trivaralogistics.com",
-        apiKey: "secret-key",
-      },
-      fetcher
+  it("requires a strong Trivara webhook token in environment settings", () => {
+    process.env.TRIVARA_WEBHOOK_AUTH_TOKEN = "short"
+
+    expect(() => getTrivaraWebhookAuthToken()).toThrow(
+      "TRIVARA_WEBHOOK_AUTH_TOKEN must be at least 20 characters long"
     )
-
-    expect(result).toMatchObject({
-      ok: true,
-      status: 200,
-      referenceNumber: "260000015315",
-      errorMessage: null,
-    })
-  })
-
-  it("keeps Trivara reference and waybill extraction separate", () => {
-    const payload = {
-      data: [
-        {
-          status: "SUCCESS",
-          message: "Order Created",
-          waybill: "46322610068051",
-          order_id: 6668,
-          reference_number: "260000015315",
-        },
-      ],
-      result: "Processed",
-    }
-
-    expect(extractTrivaraReferenceNumber(payload)).toBe("260000015315")
-    expect(extractTrivaraWaybillNumber(payload)).toBe("46322610068051")
-  })
-
-  it("extracts current Trivara tracking status from nested payloads", () => {
-    const payload = {
-      status: "success",
-      data: [
-        {
-          status: "SUCCESS",
-          waybill: "46322610068051",
-          current_status: "Manifested",
-        },
-      ],
-    }
-
-    expect(extractTrivaraTrackingStatus(payload)).toBe("Manifested")
-  })
-
-  it("prefers Trivara current_state over generic success status", () => {
-    const payload = {
-      status: "success",
-      order_details: {
-        awb: "26000015677",
-        current_state: "CANCELLED",
-      },
-    }
-
-    expect(extractTrivaraTrackingStatus(payload)).toBe("CANCELLED")
   })
 
   it("rejects invalid Trivara base URLs before sending requests", () => {
     process.env.TRIVARA_API_BASE_URL = "OY6R-not-a-url"
 
-    expect(() => getTrivaraApiBaseUrl()).toThrow(
+    expect(() => getTrivaraNewApiConfig()).toThrow(
       "TRIVARA_API_BASE_URL must be a full URL starting with https:// or http://"
     )
   })
 
-  it("requires a service partner ID when live booking is enabled", () => {
-    process.env.TRIVARA_BOOKING_ENABLED = "true"
-    process.env.TRIVARA_API_BASE_URL = "https://app.trivaralogistics.com"
-    process.env.TRIVARA_API_KEY = "secret-key"
-    process.env.TRIVARA_CRN_NO = "857252"
-    process.env.TRIVARA_WAREHOUSE_NAME = "DOMINANT_INFOTECH_101380"
-    process.env.TRIVARA_SERVICE_PARTNER_ID = ""
+  it("gets a JWT with Key ID and Secret, then sends New Order JSON data", async () => {
+    const requests: Array<{ url: string; init?: RequestInit }> = []
+    const fetcher = vi.fn(async (input: string | URL, init?: RequestInit) => {
+      requests.push({ url: String(input), init })
 
-    expect(() => getTrivaraConfig()).toThrow(
-      "Missing required environment variable: TRIVARA_SERVICE_PARTNER_ID"
-    )
-  })
+      if (String(input).endsWith("/merchant-api-keys/token")) {
+        return new Response(JSON.stringify({ token: "access-token-1" }), {
+          status: 200,
+        })
+      }
 
-  it("rejects non-numeric service partner IDs", () => {
-    process.env.TRIVARA_BOOKING_ENABLED = "true"
-    process.env.TRIVARA_API_BASE_URL = "https://app.trivaralogistics.com"
-    process.env.TRIVARA_API_KEY = "secret-key"
-    process.env.TRIVARA_CRN_NO = "857252"
-    process.env.TRIVARA_WAREHOUSE_NAME = "DOMINANT_INFOTECH_101380"
-    process.env.TRIVARA_SERVICE_PARTNER_ID = "DEL"
-
-    expect(() => getTrivaraConfig()).toThrow(
-      "TRIVARA_SERVICE_PARTNER_ID must be a positive numeric partner ID"
-    )
-  })
-
-  it("requires a warehouse name when live booking is enabled", () => {
-    process.env.TRIVARA_BOOKING_ENABLED = "true"
-    process.env.TRIVARA_API_BASE_URL = "https://app.trivaralogistics.com"
-    process.env.TRIVARA_API_KEY = "secret-key"
-    process.env.TRIVARA_CRN_NO = "868369"
-    process.env.TRIVARA_WAREHOUSE_NAME = ""
-    process.env.TRIVARA_SERVICE_PARTNER_ID = "1"
-
-    expect(() => getTrivaraConfig()).toThrow(
-      "Missing required environment variable: TRIVARA_WAREHOUSE_NAME"
-    )
-  })
-
-  it("keeps a successful HTTP response incomplete when no reference number exists", async () => {
-    const fetcher = vi.fn(async () => {
-      return new Response(JSON.stringify({ success: true }), { status: 200 })
+      return new Response(
+        JSON.stringify({ orderId: "trivara-order-1", orderStatus: "New Order" }),
+        { status: 201 }
+      )
     })
 
-    const payload = buildTrivaraOrderBookingPayload(
-      buildOrder(),
-      {
-        ...config,
-        servicePartnerId: 1,
-      }
-    )
-    const result = await sendTrivaraOrderBooking(
-      payload,
-      {
-        apiBaseUrl: "https://app.trivaralogistics.com",
-        apiKey: "secret-key",
-      },
+    const result = await sendTrivaraNewOrder(
+      buildTrivaraNewOrderPayload(buildOrder(), newOrderConfig),
+      { ...authConfig, apiKeyId: "key-id-new-order" },
       fetcher
     )
 
-    expect(result.ok).toBe(true)
-    expect(result.referenceNumber).toBeNull()
-    expect(result.errorMessage).toBeNull()
-    expect(result.responsePayload).toEqual({ success: true })
+    expect(requests[0]?.url).toBe(
+      "https://api-new.trivaralogistics.com/merchant-api-keys/token"
+    )
+    expect(JSON.parse(String(requests[0]?.init?.body))).toMatchObject({
+      keyId: "key-id-new-order",
+      secret: "secret-1",
+    })
+    expect(requests[1]?.url).toBe("https://api-new.trivaralogistics.com/orders")
+    expect(requests[1]?.init?.headers).toMatchObject({
+      Authorization: "Bearer access-token-1",
+      "Content-Type": "application/json",
+    })
+    expect(JSON.parse(String(requests[1]?.init?.body))).toMatchObject({
+      pickupAddressId: "pickup-123",
+      externalOrderId: "toycker_order-1",
+    })
+    expect(result).toMatchObject({
+      ok: true,
+      status: 201,
+      orderId: "trivara-order-1",
+      orderStatus: "New Order",
+      errorMessage: null,
+    })
   })
 
-  it("treats Trivara business errors as failed bookings", async () => {
-    const fetcher = vi.fn(async () => {
+  it("extracts visible Trivara order ID, internal API ID, and lifecycle status", () => {
+    const payload = {
+      status: "SUCCESS",
+      data: {
+        id: "cmr-internal-order-2",
+        orderId: "TRV-000002",
+        status: "PENDING",
+      },
+    }
+
+    expect(extractTrivaraOrderId(payload)).toBe("TRV-000002")
+    expect(extractTrivaraApiOrderId(payload)).toBe("cmr-internal-order-2")
+    expect(extractTrivaraOrderStatus(payload)).toBe("PENDING")
+  })
+
+  it("extracts the real tracking webhook shape from data.order", () => {
+    const payload = {
+      status: "SUCCESS",
+      data: {
+        order: {
+          awb: "14344968988391",
+          orderId: "TRV-001254",
+          status: "UNDELIVERED",
+          courier: "XPRESSBEES",
+          paymentMode: "Prepaid",
+          timeline: [
+            {
+              id: "timeline-event-1",
+              orderId: "internal-trivara-db-order-id",
+              status: "OUT_FOR_DELIVERY",
+            },
+          ],
+        },
+      },
+      message: "Tracking info loaded",
+      extra: null,
+    }
+
+    expect(extractTrivaraOrderId(payload)).toBe("TRV-001254")
+    expect(extractTrivaraOrderStatus(payload)).toBe("UNDELIVERED")
+    expect(extractTrivaraApiOrderId(payload)).not.toBe("timeline-event-1")
+    expect(extractTrivaraShipmentDetails(payload)).toMatchObject({
+      awb: "14344968988391",
+      courierName: "XPRESSBEES",
+      shipmentStatus: "UNDELIVERED",
+    })
+  })
+
+  it("does not extract real order data from Trivara test webhooks", () => {
+    const payload = {
+      event: null,
+      merchantId: "toycker_india_fc1e44",
+      timestamp: "2026-07-29T05:46:29.918Z",
+      data: {
+        _test: true,
+        event: null,
+        merchantId: "toycker_india_fc1e44",
+      },
+    }
+
+    expect(extractTrivaraOrderId(payload)).toBeNull()
+    expect(extractTrivaraOrderStatus(payload)).toBeNull()
+    expect(extractTrivaraShipmentDetails(payload)).toEqual({
+      awb: null,
+      courierName: null,
+      shipmentId: null,
+      shipmentStatus: null,
+      trackingUrl: null,
+    })
+  })
+  it("treats Trivara business errors as failed New Order responses", async () => {
+    const fetcher = vi.fn(async (input: string | URL) => {
+      if (String(input).endsWith("/merchant-api-keys/token")) {
+        return new Response(JSON.stringify({ token: "access-token-2" }), {
+          status: 200,
+        })
+      }
+
       return new Response(
-        JSON.stringify({
-          data: [{ status: "ERROR", message: "Invalid Partner" }],
-          error: "",
-          result: "Processed",
-        }),
+        JSON.stringify({ status: "failed", message: "Invalid pickup address" }),
         { status: 200 }
       )
     })
 
-    const payload = buildTrivaraOrderBookingPayload(buildOrder(), config)
-    const result = await sendTrivaraOrderBooking(
-      payload,
-      {
-        apiBaseUrl: "https://app.trivaralogistics.com",
-        apiKey: "secret-key",
-      },
+    const result = await sendTrivaraNewOrder(
+      buildTrivaraNewOrderPayload(buildOrder(), newOrderConfig),
+      { ...authConfig, apiKeyId: "key-id-error" },
       fetcher
     )
 
     expect(result.ok).toBe(false)
-    expect(result.referenceNumber).toBeNull()
-    expect(result.errorMessage).toBe("Invalid Partner")
+    expect(result.orderId).toBeNull()
+    expect(result.errorMessage).toBe("Invalid pickup address")
+  })
+
+  it("detects unsuccessful response payloads", () => {
+    expect(
+      getTrivaraResponseBusinessError({ success: false, message: "Denied" })
+    ).toBe("Denied")
   })
 
   it("includes low-level network cause details when fetch fails", async () => {
     const fetchError = Object.assign(new Error("fetch failed"), {
       cause: {
         code: "ENOTFOUND",
-        hostname: "app.trivaralogistics.com",
+        hostname: "api-new.trivaralogistics.com",
         syscall: "getaddrinfo",
       },
     })
     const fetcher = vi.fn(async () => {
       throw fetchError
     })
-    const payload = buildTrivaraOrderBookingPayload(
-      buildOrder(),
-      {
-        ...config,
-        servicePartnerId: 1,
-      }
-    )
 
     await expect(
-      sendTrivaraOrderBooking(
-        payload,
-        {
-          apiBaseUrl: "https://app.trivaralogistics.com",
-          apiKey: "secret-key",
-        },
+      sendTrivaraNewOrder(
+        buildTrivaraNewOrderPayload(buildOrder(), newOrderConfig),
+        { ...authConfig, apiKeyId: "key-id-network" },
         fetcher
       )
     ).rejects.toThrow(
-      "Trivara request failed before receiving a response (ENOTFOUND app.trivaralogistics.com getaddrinfo)"
+      "Trivara request failed before receiving a response (ENOTFOUND api-new.trivaralogistics.com getaddrinfo)"
     )
   })
-})
 
-describe("Trivara remaining endpoint integrations", () => {
-  async function captureRequest(
-    request: (
-      _fetcher: (
-        _input: string | URL,
-        _init?: RequestInit
-      ) => Promise<Response>
-    ) => Promise<unknown>
-  ) {
-    let capturedUrl: string | URL | null = null
-    let capturedInit: RequestInit | undefined
+  it("gets a JWT and fetches a Trivara order by internal API ID", async () => {
+    const requests: Array<{ url: string; init?: RequestInit }> = []
     const fetcher = vi.fn(async (input: string | URL, init?: RequestInit) => {
-      capturedUrl = input
-      capturedInit = init
+      requests.push({ url: String(input), init })
 
-      return new Response(JSON.stringify({ ok: true }), { status: 200 })
-    })
+      if (String(input).endsWith("/merchant-api-keys/token")) {
+        return new Response(JSON.stringify({ token: "access-token-4" }), {
+          status: 200,
+        })
+      }
 
-    await request(fetcher)
-
-    return { capturedUrl, capturedInit }
-  }
-
-  it("sends tracking with the Apikey header and waybill", async () => {
-    const { capturedUrl, capturedInit } = await captureRequest((fetcher) =>
-      sendTrivaraOrderTracking(
-        { crn_no: "857252", action: "track", waybill: "46322610057562" },
-        { apiBaseUrl: "https://app.trivaralogistics.com", apiKey: "track-key" },
-        fetcher
-      )
-    )
-
-    expect(String(capturedUrl)).toBe(
-      "https://app.trivaralogistics.com/api/users/V2/OrderBooking/track_parcel"
-    )
-    expect(capturedInit?.headers).toEqual({ Apikey: "track-key" })
-    expect((capturedInit?.body as FormData).get("action")).toBe("track")
-    expect((capturedInit?.body as FormData).get("waybill")).toBe(
-      "46322610057562"
-    )
-  })
-
-  it("sends print slip with the Apikey header", async () => {
-    const { capturedUrl, capturedInit } = await captureRequest((fetcher) =>
-      sendTrivaraPrintSlip(
-        {
-          crn_no: "857252",
-          reference_number: "857252P0000044",
-          awb_number: "857252P0000044",
-        },
-        {
-          apiBaseUrl: "https://app.trivaralogistics.com",
-          apiKey: "print-key",
-        },
-        fetcher
-      )
-    )
-
-    expect(String(capturedUrl)).toBe(
-      "https://app.trivaralogistics.com/api/users/V2/OrderBooking/print_slip"
-    )
-    expect(capturedInit?.headers).toEqual({ Apikey: "print-key" })
-    expect((capturedInit?.body as FormData).get("awb_number")).toBe(
-      "857252P0000044"
-    )
-  })
-
-  it("sends total orders date range", async () => {
-    const { capturedUrl, capturedInit } = await captureRequest((fetcher) =>
-      sendTrivaraTotalOrders(
-        {
-          crn_no: "857252",
-          start_date: "2026-04-01",
-          end_date: "2026-04-28",
-        },
-        { apiBaseUrl: "https://app.trivaralogistics.com", apiKey: "order-key" },
-        fetcher
-      )
-    )
-
-    expect(String(capturedUrl)).toBe(
-      "https://app.trivaralogistics.com/api/users/V2/OrderBooking/get_total_orders"
-    )
-    expect(capturedInit?.headers).toEqual({ Apikey: "order-key" })
-    expect((capturedInit?.body as FormData).get("start_date")).toBe(
-      "2026-04-01"
-    )
-  })
-
-  it("sends cancel order with the reference number", async () => {
-    const { capturedUrl, capturedInit } = await captureRequest((fetcher) =>
-      sendTrivaraCancelOrder(
-        { crn_no: "857252", reference_number: "857252P0000044" },
-        { apiBaseUrl: "https://app.trivaralogistics.com", apiKey: "cancel-key" },
-        fetcher
-      )
-    )
-
-    expect(String(capturedUrl)).toBe(
-      "https://app.trivaralogistics.com/api/users/V2/OrderBooking/cancel_order"
-    )
-    expect(capturedInit?.headers).toEqual({ Apikey: "cancel-key" })
-  })
-
-  it("treats cancel order business errors as failed responses", async () => {
-    const fetcher = vi.fn(async () => {
       return new Response(
         JSON.stringify({
-          data: [{ status: "ERROR", message: "Cancel Failed" }],
-          error: "",
-          result: "Processed",
+          status: "SUCCESS",
+          data: {
+            id: "cmr-internal-order-4",
+            orderId: "TRV-000004",
+            status: "CANCELLED",
+          },
         }),
         { status: 200 }
       )
     })
 
-    const result = await sendTrivaraCancelOrder(
-      { crn_no: "857252", reference_number: "857252P0000044" },
-      { apiBaseUrl: "https://app.trivaralogistics.com", apiKey: "cancel-key" },
+    const result = await sendTrivaraGetOrder(
+      "cmr-internal-order-4",
+      { ...authConfig, apiKeyId: "key-id-get-order" },
       fetcher
     )
 
-    expect(result.ok).toBe(false)
-    expect(result.status).toBe(200)
-    expect(result.responsePayload).toMatchObject({
-      data: [{ status: "ERROR", message: "Cancel Failed" }],
+    expect(requests[1]?.url).toBe(
+      "https://api-new.trivaralogistics.com/orders/cmr-internal-order-4"
+    )
+    expect(requests[1]?.init?.method).toBe("GET")
+    expect(result.ok).toBe(true)
+    expect(extractTrivaraOrderStatus(result.responsePayload)).toBe("CANCELLED")
+  })
+  it("gets a JWT and cancels a Trivara New Order by internal API ID", async () => {
+    const requests: Array<{ url: string; init?: RequestInit }> = []
+    const fetcher = vi.fn(async (input: string | URL, init?: RequestInit) => {
+      requests.push({ url: String(input), init })
+
+      if (String(input).endsWith("/merchant-api-keys/token")) {
+        return new Response(JSON.stringify({ token: "access-token-3" }), {
+          status: 200,
+        })
+      }
+
+      return new Response(JSON.stringify({ status: "CANCELLED" }), {
+        status: 200,
+      })
+    })
+
+    const result = await sendTrivaraCancelNewOrder(
+      "trivara-order-3",
+      { ...authConfig, apiKeyId: "key-id-cancel" },
+      fetcher
+    )
+
+    expect(requests[1]?.url).toBe(
+      "https://api-new.trivaralogistics.com/orders/trivara-order-3/status"
+    )
+    expect(requests[1]?.init?.method).toBe("PATCH")
+    expect(requests[1]?.init?.headers).toMatchObject({
+      Authorization: "Bearer access-token-3",
+      "Content-Type": "application/json",
+    })
+    expect(JSON.parse(String(requests[1]?.init?.body))).toEqual({
+      status: "CANCELLED",
+    })
+    expect(result.ok).toBe(true)
+  })
+  it("extracts AWB and courier details from nested shipment payloads", () => {
+    const payload = {
+      status: "SUCCESS",
+      data: {
+        shipment: {
+          awbNumber: "AWB123456",
+          courierName: "Delhivery",
+          shipmentId: "shipment-1",
+          shipmentStatus: "IN_TRANSIT",
+          trackingUrl: "https://tracking.example/AWB123456",
+        },
+      },
+    }
+
+    expect(extractTrivaraShipmentDetails(payload)).toEqual({
+      awb: "AWB123456",
+      courierName: "Delhivery",
+      shipmentId: "shipment-1",
+      shipmentStatus: "IN_TRANSIT",
+      trackingUrl: "https://tracking.example/AWB123456",
     })
   })
 
-  it("sends pickup locations and services with the Apikey header", async () => {
-    const pickup = await captureRequest((fetcher) =>
-      sendTrivaraPickupLocations(
-        { crn_no: "857252" },
-        { apiBaseUrl: "https://app.trivaralogistics.com", apiKey: "master-key" },
-        fetcher
+  it("extracts AWB details from alternate courier response keys", () => {
+    const payload = {
+      data: {
+        waybill: "WB987654",
+        carrier: "BlueDart",
+        shipment_number: "SHP987",
+        tracking_status: "PICKED_UP",
+        public_url: "https://tracking.example/WB987654",
+      },
+    }
+
+    expect(extractTrivaraShipmentDetails(payload)).toEqual({
+      awb: "WB987654",
+      courierName: "BlueDart",
+      shipmentId: "SHP987",
+      shipmentStatus: "PICKED_UP",
+      trackingUrl: "https://tracking.example/WB987654",
+    })
+  })
+
+  it("gets a JWT and fetches a Trivara shipment by shipment ID", async () => {
+    const requests: Array<{ url: string; init?: RequestInit }> = []
+    const fetcher = vi.fn(async (input: string | URL, init?: RequestInit) => {
+      requests.push({ url: String(input), init })
+
+      if (String(input).endsWith("/merchant-api-keys/token")) {
+        return new Response(JSON.stringify({ token: "access-token-shipment" }), {
+          status: 200,
+        })
+      }
+
+      return new Response(
+        JSON.stringify({
+          status: "SUCCESS",
+          data: {
+            awbNumber: "AWB555",
+            courierName: "Shree Maruti",
+            shipmentStatus: "SHIPPED",
+          },
+        }),
+        { status: 200 }
       )
-    )
-    const services = await captureRequest((fetcher) =>
-      sendTrivaraServices(
-        { crn_no: "857252" },
-        { apiBaseUrl: "https://app.trivaralogistics.com", apiKey: "master-key" },
-        fetcher
-      )
+    })
+
+    const result = await sendTrivaraGetShipment(
+      "shipment-555",
+      { ...authConfig, apiKeyId: "key-id-get-shipment" },
+      fetcher
     )
 
-    expect(String(pickup.capturedUrl)).toBe(
-      "https://app.trivaralogistics.com/api/users/V2/OrderBooking/get_pickup_location"
+    expect(requests[1]?.url).toBe(
+      "https://api-new.trivaralogistics.com/shipments/shipment-555"
     )
-    expect(pickup.capturedInit?.headers).toEqual({ Apikey: "master-key" })
-    expect(String(services.capturedUrl)).toBe(
-      "https://app.trivaralogistics.com/api/users/V2/Activity/get_services"
-    )
-    expect(services.capturedInit?.headers).toEqual({ Apikey: "master-key" })
+    expect(requests[1]?.init?.method).toBe("GET")
+    expect(extractTrivaraShipmentDetails(result.responsePayload)).toMatchObject({
+      awb: "AWB555",
+      courierName: "Shree Maruti",
+      shipmentStatus: "SHIPPED",
+    })
   })
 })

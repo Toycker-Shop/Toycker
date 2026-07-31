@@ -468,6 +468,7 @@ export interface ShippingPartner {
 
 export type TrivaraOrderBookingStatus =
   | "pending"
+  | "new_order"
   | "booked"
   | "failed"
   | "skipped"
@@ -478,6 +479,8 @@ export interface TrivaraOrderBooking {
   order_id: string
   status: TrivaraOrderBookingStatus
   trivara_reference_number: string | null
+  trivara_order_id: string | null
+  trivara_order_status: string | null
   request_payload: Record<string, unknown>
   response_payload: Record<string, unknown> | null
   error_message: string | null
@@ -490,10 +493,33 @@ export interface TrivaraOrderBooking {
   cancel_error_message: string | null
   cancelled_at: string | null
   booked_at: string | null
+  new_order_created_at: string | null
   created_at: string
   updated_at: string
 }
 
+export type TrivaraWebhookEventStatus =
+  | "received"
+  | "processed"
+  | "ignored"
+  | "failed"
+
+export interface TrivaraWebhookEvent {
+  id: string
+  event_name: string | null
+  merchant_id: string | null
+  extracted_external_order_id: string | null
+  extracted_toycker_order_id: string | null
+  extracted_trivara_order_id: string | null
+  extracted_trivara_api_order_id: string | null
+  matched_order_id: string | null
+  status: TrivaraWebhookEventStatus
+  response_status: number | null
+  error_message: string | null
+  payload: Record<string, unknown>
+  processed_at: string | null
+  created_at: string
+}
 export type TrivaraSyncSnapshotKey =
   | "total_orders"
   | "pickup_locations"
@@ -535,3 +561,4 @@ export interface GlobalSettings {
   is_gift_wrap_enabled: boolean
   updated_at: string
 }
+

@@ -53,7 +53,7 @@ export function SubmitButton({
             {...props}
         >
             {pending && <Loader2 className="h-4 w-4 animate-spin" />}
-            {pending ? (loadingText || children) : children}
+            {pending ? (loadingText !== undefined ? loadingText : children) : children}
         </button>
     )
 }

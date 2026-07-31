@@ -14,6 +14,7 @@
     "build": "next build --webpack",
     "start": "next start -p 3000",
     "lint": "eslint src next.config.js tailwind.config.js postcss.config.js --ext .js,.jsx,.ts,.tsx",
+    "typecheck": "tsc --noEmit",
     "analyze": "cross-env ANALYZE=true next build",
     "test": "vitest run"
   },
@@ -105,3 +106,4 @@
     }
   }
 }
+

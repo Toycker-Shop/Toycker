@@ -1,6 +1,7 @@
 import { getAdminOrder, getAdminOrderNavigation, getTrivaraFulfillmentPartner, getOrderTimeline, getCustomerDisplayId } from "@/lib/data/admin"
 import { getRegion } from "@/lib/data/regions"
 import { formatCustomerDisplayId } from "@/lib/util/customer"
+import { canAcceptOrderForPayment } from "@/lib/util/customer-order-state"
 import {
   canEditOrderShippingAddress,
   ORDER_SHIPPING_ADDRESS_LOCK_MESSAGE,
@@ -32,6 +33,10 @@ import { RealtimeOrderManager } from "@modules/common/components/realtime-order-
 import { ProtectedAction } from "@/lib/permissions/components/protected-action"
 import { PERMISSIONS } from "@/lib/permissions"
 import { expireStaleEasebuzzPendingPayments } from "@/lib/actions/cancel-pending-payment"
+import {
+  getTrivaraFulfillmentMetadata,
+  getTrivaraTrackingUrl,
+} from "@/lib/util/trivara-fulfillment"
 
 const normalizePaymentMethod = (method?: string | null, hasPayuTxn?: string | null, hasGatewayTxn?: string | null) => {
   if (!method && hasGatewayTxn) return "easebuzz"
@@ -245,11 +250,15 @@ export default async function AdminOrderDetails({ params, searchParams }: Props)
     getRegion(),
     getAdminOrderNavigation(order.display_id),
   ])
+  const trivaraFulfillment = getTrivaraFulfillmentMetadata(order.metadata)
+  const awbNumber = order.tracking_number || trivaraFulfillment?.awb || null
+  const courierName =
+    trivaraFulfillment?.courierName || trivaraFulfillmentPartner?.name || null
+  const trackingUrl = getTrivaraTrackingUrl(trivaraFulfillment, awbNumber)
   const canEditShippingAddress = canEditOrderShippingAddress(order.status)
   const canAcceptOrder =
     (order.status === "order_placed" || order.status === "pending") &&
-    (order.payment_method !== "pp_easebuzz_partial_payment" ||
-      ["partially_paid", "paid", "captured"].includes(order.payment_status))
+    canAcceptOrderForPayment(order)
 
   const actions = (
     <div className="flex gap-2">
@@ -267,6 +276,7 @@ export default async function AdminOrderDetails({ params, searchParams }: Props)
             <FulfillmentModal
               orderId={order.id}
               trivaraPartner={trivaraFulfillmentPartner}
+              initialAwb={awbNumber}
             />
             <CancelOrderButton orderId={order.id} />
           </div>
@@ -339,6 +349,7 @@ export default async function AdminOrderDetails({ params, searchParams }: Props)
     orderMetadata.payment_discount_percentage
   )
   const partialPaymentData = getPartialPaymentDisplayData(order.metadata)
+
 
   return (
     <div className="space-y-6">
@@ -689,15 +700,27 @@ export default async function AdminOrderDetails({ params, searchParams }: Props)
                   </ProtectedAction>
                 )}
               </div>
-              {order.shipping_partner_id && order.tracking_number && (
+              {awbNumber && (
                 <div className="flex items-center gap-3 pb-4 border-b border-gray-100">
                   <div className="h-10 w-10 rounded-lg bg-indigo-50 flex items-center justify-center">
                     <TruckIcon className="h-5 w-5 text-indigo-600" />
                   </div>
-                  <div>
-                    <p className="text-sm font-bold text-gray-900">Tracking: {order.tracking_number}</p>
-                    <p className="text-xs text-gray-500">{order.fulfillment_status}</p>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm font-bold text-gray-900">AWB Number: {awbNumber}</p>
+                    <p className="text-xs text-gray-500">
+                      {courierName ? `Courier: ${courierName}` : order.fulfillment_status}
+                    </p>
                   </div>
+                  {trackingUrl && (
+                    <a
+                      href={trackingUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-xs font-bold text-indigo-600 underline underline-offset-4 hover:text-indigo-700"
+                    >
+                      Track
+                    </a>
+                  )}
                 </div>
               )}
               <div className="flex gap-3 text-sm font-medium text-gray-600 leading-relaxed">

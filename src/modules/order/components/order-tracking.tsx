@@ -4,6 +4,10 @@ import { useEffect, useMemo, useState } from "react"
 import { Order } from "@/lib/supabase/types"
 import { Check, Package, Truck, Home, Clock } from "lucide-react"
 import { RealtimeOrderManager } from "@modules/common/components/realtime-order-manager"
+import {
+    getTrivaraFulfillmentMetadata,
+    getTrivaraTrackingUrl,
+} from "@/lib/util/trivara-fulfillment"
 
 type OrderTrackingProps = {
     order: Order
@@ -11,6 +15,11 @@ type OrderTrackingProps = {
 
 const OrderTracking = ({ order: initialOrder }: OrderTrackingProps) => {
     const [order, setOrder] = useState(initialOrder)
+    const trivaraFulfillment = getTrivaraFulfillmentMetadata(order.metadata)
+    const awbNumber = order.tracking_number || trivaraFulfillment?.awb || null
+    const courierName =
+        trivaraFulfillment?.courierName || order.shipping_partner?.name || null
+    const trackingUrl = getTrivaraTrackingUrl(trivaraFulfillment, awbNumber)
 
     // Sync state when props change (from router.refresh() or parent)
     useEffect(() => {
@@ -41,10 +50,10 @@ const OrderTracking = ({ order: initialOrder }: OrderTrackingProps) => {
                         <h3 className="text-xl font-black text-slate-900">Track Order</h3>
                         <p className="text-sm text-slate-500">Real-time updates on your delivery</p>
                     </div>
-                    {order.tracking_number && (
+                    {awbNumber && (
                         <div className="bg-gradient-to-r from-sky-50 to-indigo-50 border border-blue-100 rounded-2xl px-4 py-2 flex flex-col items-end shadow-sm">
-                            <span className="text-[10px] font-bold text-blue-400 uppercase tracking-widest leading-none mb-1">Tracking Number</span>
-                            <span className="text-sm font-black text-blue-700 font-mono uppercase tracking-tighter">{order.tracking_number}</span>
+                            <span className="text-[10px] font-bold text-blue-400 uppercase tracking-widest leading-none mb-1">AWB Number</span>
+                            <span className="text-sm font-black text-blue-700 font-mono uppercase tracking-tighter">{awbNumber}</span>
                         </div>
                     )}
                 </div>
@@ -90,18 +99,18 @@ const OrderTracking = ({ order: initialOrder }: OrderTrackingProps) => {
                     </div>
                 </div>
 
-                {(order.status === 'shipped' || order.status === 'delivered') && order.shipping_partner?.name && (
+                {(order.status === 'shipped' || order.status === 'delivered') && courierName && (
                     <div className="mt-4 p-4 bg-slate-50 rounded-2xl border border-dotted border-slate-200 flex items-center gap-x-4">
                         <div className="w-10 h-10 bg-white rounded-xl shadow-sm flex items-center justify-center">
                             <Truck className="w-6 h-6 text-slate-400" />
                         </div>
                         <div className="flex-1">
                             <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">Shipped via</p>
-                            <p className="text-sm font-black text-slate-900">{order.shipping_partner.name}</p>
+                            <p className="text-sm font-black text-slate-900">{courierName}</p>
                         </div>
-                        {order.tracking_number && (
+                        {awbNumber && (
                             <a
-                                href={`https://www.google.com/search?q=${encodeURIComponent(order.shipping_partner.name + " tracking " + order.tracking_number)}`}
+                                href={trackingUrl || `https://www.google.com/search?q=${encodeURIComponent(courierName + " tracking " + awbNumber)}`}
                                 target="_blank"
                                 rel="noopener noreferrer"
                                 className="text-xs font-black text-blue-600 hover:text-blue-700 underline underline-offset-4"

@@ -1,4 +1,4 @@
-"use client"
+﻿"use client"
 
 /**
  * Order Status Card Component
@@ -108,11 +108,11 @@ export default function OrderStatusCard({ order }: OrderStatusCardProps) {
                 {/* Tracking Info (if shipped) */}
                 {order.trackingNumber && (
                     <div className="bg-blue-600 rounded-xl p-4 shadow-sm text-white">
-                        <p className="text-[11px] text-blue-100 font-bold uppercase tracking-wider mb-1">📦 Tracking Number</p>
+                        <p className="text-[11px] text-blue-100 font-bold uppercase tracking-wider mb-1">AWB Number</p>
                         <p className="text-[15px] font-mono font-bold tracking-widest">{order.trackingNumber}</p>
                         {order.shippingPartner && (
                             <div className="flex items-center gap-1.5 mt-2 pt-2 border-t border-blue-500/50">
-                                <span className="text-[11px] text-blue-100">Carrier:</span>
+                                <span className="text-[11px] text-blue-100">Courier:</span>
                                 <span className="text-xs font-bold">{order.shippingPartner}</span>
                             </div>
                         )}
