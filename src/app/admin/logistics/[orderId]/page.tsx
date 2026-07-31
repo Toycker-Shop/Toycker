@@ -9,6 +9,7 @@ import {
 } from "@heroicons/react/24/outline"
 import AdminBadge from "@modules/admin/components/admin-badge"
 import AdminCard from "@modules/admin/components/admin-card"
+import { SubmitButton } from "@modules/admin/components"
 import RealtimeLogisticsListener from "@modules/admin/components/realtime-logistics-listener"
 import { convertToLocale } from "@lib/util/money"
 import { formatIST } from "@/lib/util/date"
@@ -40,7 +41,7 @@ function getStatusBadge(status: TrivaraOrderBookingStatus) {
     case "new_order":
       return { variant: "info" as const, label: "New Order" }
     case "booked":
-      return { variant: "success" as const, label: "Legacy Booked" }
+      return { variant: "success" as const, label: "Booked" }
     case "pending":
       return { variant: "info" as const, label: "Pending" }
     case "failed":
@@ -102,7 +103,7 @@ function getCurrentTrivaraStatus(
   }
 
   if (record.status === "booked") {
-    return "Legacy Booked"
+    return "Booked"
   }
 
   return formatStatusLabel(record.status)
@@ -539,26 +540,37 @@ export default async function AdminLogisticsDetail({ params }: Props) {
         <div className="flex flex-wrap gap-2">
           {canRetry && (
             <form action={retryTrivaraBooking.bind(null, record.order_id)}>
-              <button className="inline-flex items-center gap-2 rounded-lg bg-indigo-600 px-4 py-2 text-xs font-semibold text-white hover:bg-indigo-700">
+              <SubmitButton
+                loadingText="Retrying..."
+                className="rounded-lg bg-indigo-600 px-4 py-2 text-xs font-semibold text-white hover:bg-indigo-700"
+              >
                 <ArrowPathIcon className="h-4 w-4" />
                 Retry Sync
-              </button>
+              </SubmitButton>
             </form>
           )}
           {canSyncRemoteStatus && (
             <form action={syncTrivaraOrderStatus.bind(null, record.order_id)}>
-              <button className="inline-flex items-center gap-2 rounded-lg bg-blue-50 px-4 py-2 text-xs font-semibold text-blue-700 hover:bg-blue-100">
+              <SubmitButton
+                loadingText="Syncing..."
+                variant="secondary"
+                className="rounded-lg bg-blue-50 px-4 py-2 text-xs font-semibold text-blue-700 hover:bg-blue-100"
+              >
                 <ArrowPathIcon className="h-4 w-4" />
                 Sync from Trivara
-              </button>
+              </SubmitButton>
             </form>
           )}
           {(canCancelOrder || canSyncTrivaraCancellation) && (
             <form action={cancelTrivaraOrder.bind(null, record.order_id)}>
-              <button className="inline-flex items-center gap-2 rounded-lg bg-red-50 px-4 py-2 text-xs font-semibold text-red-700 hover:bg-red-100">
+              <SubmitButton
+                loadingText="Cancelling..."
+                variant="secondary"
+                className="rounded-lg bg-red-50 px-4 py-2 text-xs font-semibold text-red-700 hover:bg-red-100"
+              >
                 <XCircleIcon className="h-4 w-4" />
                 {canCancelOrder ? "Cancel Order" : "Cancel Trivara"}
-              </button>
+              </SubmitButton>
             </form>
           )}
         </div>

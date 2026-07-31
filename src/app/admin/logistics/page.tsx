@@ -1,11 +1,13 @@
 import Link from "next/link"
-import { XCircleIcon } from "@heroicons/react/24/outline"
+import { ArrowPathIcon, XCircleIcon } from "@heroicons/react/24/outline"
 import AdminBadge from "@modules/admin/components/admin-badge"
 import AdminPageHeader from "@modules/admin/components/admin-page-header"
 import RealtimeLogisticsListener from "@modules/admin/components/realtime-logistics-listener"
 import { AdminPagination } from "@modules/admin/components/admin-pagination"
 import { AdminSearchInput } from "@modules/admin/components/admin-search-input"
 import { AdminTableWrapper } from "@modules/admin/components/admin-table-wrapper"
+import { ClickableTableRow } from "@modules/admin/components/clickable-table-row"
+import { SubmitButton } from "@modules/admin/components"
 import { convertToLocale } from "@lib/util/money"
 import { formatIST } from "@/lib/util/date"
 import {
@@ -27,49 +29,61 @@ const STATUS_FILTERS: Array<{
 }> = [
   { label: "All", value: "all" },
   { label: "Pending", value: "pending" },
-  { label: "New Order", value: "new_order" },
   { label: "Failed", value: "failed" },
   { label: "Skipped", value: "skipped" },
   { label: "Cancelled", value: "cancelled" },
-  { label: "Legacy Booked", value: "booked" },
+  { label: "Booked", value: "booked" },
 ]
 
-function getStatusBadge(status: TrivaraOrderBookingStatus) {
-  switch (status) {
-    case "new_order":
-      return { variant: "info" as const, label: "New Order" }
-    case "booked":
-      return { variant: "success" as const, label: "Legacy Booked" }
-    case "pending":
-      return { variant: "info" as const, label: "Pending" }
-    case "failed":
-      return { variant: "error" as const, label: "Failed" }
-    case "skipped":
-      return { variant: "warning" as const, label: "Skipped" }
-    case "cancelled":
-      return { variant: "neutral" as const, label: "Cancelled" }
-  }
-}
-
 function formatRemoteStatus(record: {
-  status: TrivaraOrderBookingStatus
   trivara_order_status: string | null
 }) {
-  if (record.trivara_order_status) {
-    return record.trivara_order_status
+  const value = record.trivara_order_status?.trim()
+
+  if (!value) {
+    return "-"
   }
 
-  if (record.status === "new_order") {
-    return "New Order"
+  const normalized = value.toLowerCase().replace(/[\s-]+/g, "_")
+
+  if (normalized === "new_order" || normalized === "pending_approval") {
+    return "Pending Approval"
   }
 
-  if (record.status === "booked") {
-    return "Legacy Booked"
-  }
-
-  return record.status
+  return value
     .replace(/_/g, " ")
+    .toLowerCase()
     .replace(/\b\w/g, (letter) => letter.toUpperCase())
+}
+
+function getRemoteStatusBadgeVariant(status: string | null) {
+  const normalized = status?.trim().toLowerCase().replace(/[\s-]+/g, "_") || ""
+
+  if (!normalized) {
+    return "neutral" as const
+  }
+
+  if (["new_order", "pending", "pending_approval", "created", "order_created", "success"].includes(normalized)) {
+    return "info" as const
+  }
+
+  if (["booked", "assigned", "ready_to_ship", "pickup_scheduled", "in_transit", "out_for_delivery"].includes(normalized)) {
+    return "warning" as const
+  }
+
+  if (["delivered"].includes(normalized)) {
+    return "success" as const
+  }
+
+  if (["cancelled", "canceled"].includes(normalized)) {
+    return "neutral" as const
+  }
+
+  if (["failed", "failure", "error", "undelivered", "lost", "rto", "rto_initiated", "rto_in_transit", "rto_delivered"].includes(normalized)) {
+    return "error" as const
+  }
+
+  return "neutral" as const
 }
 
 function SummaryCard({
@@ -129,12 +143,12 @@ export default async function AdminLogistics({
       <RealtimeLogisticsListener />
       <AdminPageHeader
         title="Logistics"
-        subtitle="Manage Trivara New Order syncs created from accepted Toycker orders. Booking is handled in the new Trivara dashboard."
+        subtitle="Manage Trivara logistics syncs created from accepted Toycker orders. Pending approvals and shipment status come from Trivara."
       />
 
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <SummaryCard label="Total records" value={statusCounts.total} tone="gray" />
-        <SummaryCard label="New Orders" value={statusCounts.new_order} tone="blue" />
+        <SummaryCard label="Pending approvals" value={statusCounts.pending} tone="blue" />
         <SummaryCard label="Failed syncs" value={statusCounts.failed} tone="red" />
         <SummaryCard label="Skipped syncs" value={statusCounts.skipped} tone="amber" />
       </div>
@@ -182,25 +196,27 @@ export default async function AdminLogistics({
                 Order
               </th>
               <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
+                Date
+              </th>
+              <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
                 Customer
               </th>
               <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
-                Trivara New Order
-              </th>
-              <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
-                Payment
+                Payment & Payment Method
               </th>
               <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
                 Last Sync
               </th>
+              <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
+                Remote Status
+              </th>
               <th className="px-6 py-3 text-right text-xs font-medium uppercase tracking-wider text-gray-500">
-                Actions
+                Action
               </th>
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-100 bg-white">
             {records.map((record) => {
-              const statusBadge = getStatusBadge(record.status)
               const hasTrivaraOrderId = Boolean(record.trivara_order_id)
               const paymentStatus = record.order
                 ? getPaymentStatusDisplay({
@@ -228,17 +244,21 @@ export default async function AdminLogistics({
               )
 
               return (
-                <tr key={record.id} className="hover:bg-gray-50">
+                <ClickableTableRow
+                  key={record.id}
+                  href={`/admin/logistics/${record.order_id}`}
+                  className="cursor-pointer transition-colors hover:bg-gray-50"
+                >
                   <td className="whitespace-nowrap px-6 py-4">
-                    <Link
-                      href={`/admin/logistics/${record.order_id}`}
-                      className="text-sm font-semibold text-gray-900 hover:text-indigo-600"
-                    >
+                    <span className="text-sm font-semibold tracking-tight text-gray-900 transition-colors group-hover:text-indigo-600">
                       #{record.order?.display_id || record.order_id}
-                    </Link>
-                    <p className="mt-1 text-xs text-gray-400">
-                      {record.order ? formatIST(record.order.created_at) : ""}
+                    </span>
+                    <p className="mt-1 text-xs font-mono text-gray-400">
+                      {record.trivara_order_id || "No Trivara order ID"}
                     </p>
+                  </td>
+                  <td className="whitespace-nowrap px-6 py-4 text-sm text-gray-500">
+                    {record.order ? formatIST(record.order.created_at) : "-"}
                   </td>
                   <td className="px-6 py-4">
                     <p className="text-sm text-gray-700">
@@ -248,31 +268,19 @@ export default async function AdminLogistics({
                       Toycker: {record.order?.status || "-"}
                     </p>
                   </td>
-                  <td className="px-6 py-4">
-                    <AdminBadge variant={statusBadge.variant}>
-                      {statusBadge.label}
-                    </AdminBadge>
-                    <p className="mt-2 text-xs font-mono text-gray-500">
-                      {record.trivara_order_id || "No Trivara order ID"}
-                    </p>
-                    <p className="mt-1 text-xs text-gray-500">
-                      Remote: {formatRemoteStatus(record)}
-                    </p>
-                    {record.error_message && (
-                      <p className="mt-1 max-w-xs truncate text-xs text-red-600">
-                        {record.error_message}
-                      </p>
-                    )}
-                  </td>
-                  <td className="whitespace-nowrap px-6 py-4 text-sm text-gray-600">
-                    <p>{getPaymentMethodDisplay(record.order?.payment_method)}</p>
-                    {paymentStatus && (
-                      <p className="mt-1 text-xs text-gray-500">
+                  <td className="whitespace-nowrap px-6 py-4">
+                    {paymentStatus ? (
+                      <AdminBadge variant={paymentStatus.tone}>
                         {paymentStatus.label}
-                      </p>
+                      </AdminBadge>
+                    ) : (
+                      <span className="text-sm text-gray-400">-</span>
                     )}
+                    <p className="mt-2 text-sm font-medium text-gray-600">
+                      {getPaymentMethodDisplay(record.order?.payment_method)}
+                    </p>
                     {record.order && (
-                      <p className="mt-1 font-medium text-gray-900">
+                      <p className="mt-1 text-sm font-medium text-gray-900">
                         {convertToLocale({
                           amount: record.order.total_amount,
                           currency_code: record.order.currency_code,
@@ -284,43 +292,58 @@ export default async function AdminLogistics({
                     {formatIST(record.updated_at)}
                   </td>
                   <td className="px-6 py-4">
+                    <AdminBadge variant={getRemoteStatusBadgeVariant(record.trivara_order_status)}>
+                      {formatRemoteStatus(record)}
+                    </AdminBadge>
+                  </td>
+                  <td className="relative z-20 px-6 py-4">
                     <div className="flex flex-wrap justify-end gap-2">
-                      <Link
-                        href={`/admin/logistics/${record.order_id}`}
-                        className="rounded-lg bg-gray-100 px-3 py-1.5 text-xs font-semibold text-gray-700 hover:bg-gray-200"
-                      >
-                        View
-                      </Link>
                       {canRetry && (
                         <form action={retryTrivaraBooking.bind(null, record.order_id)}>
-                          <button className="rounded-lg bg-indigo-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-indigo-700">
-                            Retry Sync
-                          </button>
+                          <SubmitButton
+                            loadingText=""
+                            title="Retry Sync"
+                            aria-label="Retry Sync"
+                            className="h-8 min-w-0 w-8 rounded-lg bg-indigo-600 p-0 text-white hover:bg-indigo-700"
+                          >
+                            <ArrowPathIcon className="h-4 w-4" />
+                          </SubmitButton>
                         </form>
                       )}
                       {canSyncRemoteStatus && (
                         <form action={syncTrivaraOrderStatus.bind(null, record.order_id)}>
-                          <button className="inline-flex items-center gap-1 rounded-lg bg-blue-50 px-3 py-1.5 text-xs font-semibold text-blue-700 hover:bg-blue-100">
-                            Sync from Trivara
-                          </button>
+                          <SubmitButton
+                            loadingText=""
+                            title="Sync from Trivara"
+                            aria-label="Sync from Trivara"
+                            variant="secondary"
+                            className="h-8 min-w-0 w-8 rounded-lg bg-blue-50 p-0 text-blue-700 hover:bg-blue-100"
+                          >
+                            <ArrowPathIcon className="h-4 w-4" />
+                          </SubmitButton>
                         </form>
                       )}
                       {(canCancelOrder || canSyncTrivaraCancellation) && (
                         <form action={cancelTrivaraOrder.bind(null, record.order_id)}>
-                          <button className="inline-flex items-center gap-1 rounded-lg bg-red-50 px-3 py-1.5 text-xs font-semibold text-red-700 hover:bg-red-100">
-                            <XCircleIcon className="h-3.5 w-3.5" />
-                            {canCancelOrder ? "Cancel Order" : "Cancel Trivara"}
-                          </button>
+                          <SubmitButton
+                            loadingText=""
+                            title={canCancelOrder ? "Cancel Order" : "Cancel Trivara"}
+                            aria-label={canCancelOrder ? "Cancel Order" : "Cancel Trivara"}
+                            variant="secondary"
+                            className="h-8 min-w-0 w-8 rounded-lg bg-red-50 p-0 text-red-700 hover:bg-red-100"
+                          >
+                            <XCircleIcon className="h-4 w-4" />
+                          </SubmitButton>
                         </form>
                       )}
                     </div>
                   </td>
-                </tr>
+                </ClickableTableRow>
               )
             })}
             {records.length === 0 && (
               <tr>
-                <td colSpan={6} className="px-6 py-16 text-center text-sm text-gray-500">
+                <td colSpan={7} className="px-6 py-16 text-center text-sm text-gray-500">
                   No Trivara logistics records found.
                 </td>
               </tr>

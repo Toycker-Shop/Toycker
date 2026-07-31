@@ -2,7 +2,7 @@ import { Order } from "@/lib/supabase/types"
 import { isCashOnDeliveryLikeOrder } from "@/lib/util/customer-order-state"
 import { getPartialPaymentDisplayData } from "@/lib/util/order-pricing"
 
-export type TrivaraPaymentMode = "PREPAID" | "COD"
+export type TrivaraPaymentMode = "Prepaid" | "COD"
 
 export type TrivaraNewApiConfig = {
   orderSyncEnabled: boolean
@@ -296,17 +296,19 @@ function getOrderDiscount(order: OrderForTrivara): number {
   return formatAmountNumber(order.discount_total)
 }
 
-function getPaymentDetails(order: OrderForTrivara): {
+type TrivaraPaymentDetails = {
   paymentMode: TrivaraPaymentMode
   codAmount: number
-} {
+}
+
+function getPaymentDetails(order: OrderForTrivara): TrivaraPaymentDetails {
   const partialPaymentData = getPartialPaymentDisplayData(order.metadata)
   const pendingPartialBalance =
     order.payment_method === "pp_easebuzz_partial_payment" &&
     partialPaymentData?.balancePaymentStatus === "pending" &&
     partialPaymentData.balanceRemainingAmount > 0
   const paymentMode: TrivaraPaymentMode =
-    pendingPartialBalance || isCashOnDeliveryLikeOrder(order) ? "COD" : "PREPAID"
+    pendingPartialBalance || isCashOnDeliveryLikeOrder(order) ? "COD" : "Prepaid"
 
   if (pendingPartialBalance) {
     return {
@@ -333,6 +335,17 @@ function getItemUnitPrice(
   item: TrivaraOrderSourceItem,
   quantity: number
 ): number {
+  const originalUnitPrice = Number(item.original_unit_price)
+
+  if (Number.isFinite(originalUnitPrice)) {
+    return formatAmountNumber(originalUnitPrice)
+  }
+
+  const originalLineTotal = Number(item.original_total)
+  if (Number.isFinite(originalLineTotal) && quantity > 0) {
+    return formatAmountNumber(originalLineTotal / quantity)
+  }
+
   const unitPrice = Number(item.unit_price)
 
   if (Number.isFinite(unitPrice)) {

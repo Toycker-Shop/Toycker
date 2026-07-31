@@ -63,6 +63,10 @@ export type TrivaraLogisticsRecord = TrivaraOrderBooking & {
   > | null
 }
 
+type TrivaraOrderBookingWithOrder = TrivaraOrderBooking & {
+  orders: LogisticsOrderSummary | null
+}
+
 export type TrivaraLogisticsListParams = {
   page?: number
   limit?: number
@@ -162,6 +166,8 @@ export async function getTrivaraLogisticsStatusCounts(): Promise<TrivaraLogistic
     counts[LOGISTICS_STATUSES[index]] = result.count || 0
   })
 
+  counts.pending += counts.new_order
+
   return counts
 }
 
@@ -218,7 +224,9 @@ export async function getTrivaraLogisticsRecords(
     .from("trivara_order_bookings")
     .select("*", { count: "exact", head: true })
 
-  if (status !== "all") {
+  if (status === "pending") {
+    countQuery = countQuery.in("status", ["pending", "new_order"])
+  } else if (status !== "all") {
     countQuery = countQuery.eq("status", status)
   }
 
@@ -233,11 +241,16 @@ export async function getTrivaraLogisticsRecords(
 
   let query = supabase
     .from("trivara_order_bookings")
-    .select("*")
+    .select(
+      `*, orders!inner(id, display_id, customer_email, status, payment_method, payment_status, total_amount, currency_code, created_at, shipping_address, tracking_number, metadata)`
+    )
+    .order("created_at", { referencedTable: "orders", ascending: false })
     .order("updated_at", { ascending: false })
     .range(from, to)
 
-  if (status !== "all") {
+  if (status === "pending") {
+    query = query.in("status", ["pending", "new_order"])
+  } else if (status !== "all") {
     query = query.eq("status", status)
   }
 
@@ -250,32 +263,16 @@ export async function getTrivaraLogisticsRecords(
     throw new Error(error.message)
   }
 
-  const bookings = (data || []) as TrivaraOrderBooking[]
-  const orderIds = bookings.map((booking) => booking.order_id)
-  const ordersById = new Map<string, LogisticsOrderSummary>()
+  const rows = (data || []) as TrivaraOrderBookingWithOrder[]
+  const records = rows.map((row) => {
+    const { orders, ...booking } = row
 
-  if (orderIds.length > 0) {
-    const { data: orders, error: ordersError } = await supabase
-      .from("orders")
-      .select(
-        "id, display_id, customer_email, status, payment_method, payment_status, total_amount, currency_code, created_at, shipping_address, tracking_number, metadata"
-      )
-      .in("id", orderIds)
-
-    if (ordersError) {
-      throw new Error(ordersError.message)
+    return {
+      ...booking,
+      order: orders,
+      cancellation_event: null,
     }
-
-    ;((orders || []) as LogisticsOrderSummary[]).forEach((order) => {
-      ordersById.set(order.id, order)
-    })
-  }
-
-  const records = bookings.map((booking) => ({
-    ...booking,
-    order: ordersById.get(booking.order_id) || null,
-    cancellation_event: null,
-  }))
+  })
   const totalCount = count || 0
   const totalPages = Math.ceil(totalCount / limit) || 1
 
@@ -369,8 +366,66 @@ function isCancelledTrivaraStatus(status: string | null): boolean {
   return normalized === "cancelled" || normalized === "canceled"
 }
 
+function isPendingApprovalTrivaraStatus(status: string | null): boolean {
+  const normalized = normalizeTrivaraLifecycleStatus(status)
+
+  return (
+    normalized === "new_order" ||
+    normalized === "pending" ||
+    normalized === "pending_approval"
+  )
+}
+
+function isBookedTrivaraShipmentStatus(status: string | null): boolean {
+  const normalized = normalizeTrivaraLifecycleStatus(status)
+
+  return [
+    "assigned",
+    "ready_to_ship",
+    "pickup_scheduled",
+    "in_transit",
+    "out_for_delivery",
+    "delivered",
+    "undelivered",
+    "failed",
+    "lost",
+    "shipment_delayed",
+    "rto",
+    "rto_initiated",
+    "rto_in_transit",
+    "rto_delivered",
+  ].includes(normalized)
+}
+
 function isDeliveredTrivaraStatus(status: string | null): boolean {
   return normalizeTrivaraLifecycleStatus(status) === "delivered"
+}
+
+function shouldMarkTrivaraBookingAsBooked(params: {
+  bookingStatus: TrivaraOrderBookingStatus
+  remoteStatus: string | null
+  shipmentDetails: TrivaraShipmentDetails
+}): boolean {
+  const currentShipmentStatus =
+    params.shipmentDetails.shipmentStatus || params.remoteStatus
+
+  if (params.bookingStatus === "cancelled") {
+    return false
+  }
+
+  if (
+    isCancelledTrivaraStatus(params.remoteStatus) ||
+    isCancelledTrivaraStatus(currentShipmentStatus) ||
+    isPendingApprovalTrivaraStatus(params.remoteStatus) ||
+    isPendingApprovalTrivaraStatus(currentShipmentStatus)
+  ) {
+    return false
+  }
+
+  return (
+    hasTrivaraFulfillmentDetails(params.shipmentDetails) ||
+    isBookedTrivaraShipmentStatus(currentShipmentStatus)
+  )
 }
 
 type TrivaraCancellationSyncSource = "manual_sync" | "webhook" | "fallback"
@@ -785,22 +840,46 @@ async function storeTrivaraTrackingSync(params: {
   syncedAt: string
   errorMessage: string | null
 }) {
+  const currentShipmentStatus =
+    params.shipmentDetails.shipmentStatus || params.remoteStatus
+  const shouldMarkBooked = shouldMarkTrivaraBookingAsBooked({
+    bookingStatus: params.booking.status,
+    remoteStatus: params.remoteStatus,
+    shipmentDetails: params.shipmentDetails,
+  })
+  const bookingUpdate: {
+    tracking_status: string | null
+    tracking_payload: Record<string, unknown>
+    tracking_synced_at: string
+    trivara_order_id: string | null
+    trivara_order_status: string | null
+    error_message: string | null
+    updated_at: string
+    status?: TrivaraOrderBookingStatus
+    booked_at?: string
+  } = {
+    tracking_status:
+      params.shipmentDetails.shipmentStatus ||
+      params.remoteStatus ||
+      params.booking.tracking_status,
+    tracking_payload: params.trackingPayload,
+    tracking_synced_at: params.syncedAt,
+    trivara_order_id:
+      params.visibleTrivaraOrderId || params.booking.trivara_order_id,
+    trivara_order_status:
+      params.remoteStatus || params.booking.trivara_order_status,
+    error_message: params.errorMessage,
+    updated_at: params.syncedAt,
+  }
+
+  if (shouldMarkBooked && params.booking.status !== "booked") {
+    bookingUpdate.status = "booked"
+    bookingUpdate.booked_at = params.booking.booked_at || params.syncedAt
+  }
+
   const { error: trackingUpdateError } = await params.supabase
     .from("trivara_order_bookings")
-    .update({
-      tracking_status:
-        params.shipmentDetails.shipmentStatus ||
-        params.remoteStatus ||
-        params.booking.tracking_status,
-      tracking_payload: params.trackingPayload,
-      tracking_synced_at: params.syncedAt,
-      trivara_order_id:
-        params.visibleTrivaraOrderId || params.booking.trivara_order_id,
-      trivara_order_status:
-        params.remoteStatus || params.booking.trivara_order_status,
-      error_message: params.errorMessage,
-      updated_at: params.syncedAt,
-    })
+    .update(bookingUpdate)
     .eq("order_id", params.booking.order_id)
 
   if (trackingUpdateError) {
@@ -814,24 +893,23 @@ async function storeTrivaraTrackingSync(params: {
     params.syncedAt
   )
 
-  await autoFulfillOrderFromTrivara(params.booking.order_id, {
-    ...params.shipmentDetails,
-    syncedAt: params.syncedAt,
-  })
-
-  const currentShipmentStatus =
-    params.shipmentDetails.shipmentStatus || params.remoteStatus
-
-  if (isDeliveredTrivaraStatus(currentShipmentStatus)) {
-    await autoMarkOrderDeliveredFromTrivara(params.booking.order_id, {
-      trivara_order_id:
-        params.visibleTrivaraOrderId || params.booking.trivara_order_id,
-      trivara_status: currentShipmentStatus,
-      awb: params.shipmentDetails.awb,
-      courier: params.shipmentDetails.courierName,
-      shipment_id: params.shipmentDetails.shipmentId,
-      synced_at: params.syncedAt,
+  if (shouldMarkBooked) {
+    await autoFulfillOrderFromTrivara(params.booking.order_id, {
+      ...params.shipmentDetails,
+      syncedAt: params.syncedAt,
     })
+
+    if (isDeliveredTrivaraStatus(currentShipmentStatus)) {
+      await autoMarkOrderDeliveredFromTrivara(params.booking.order_id, {
+        trivara_order_id:
+          params.visibleTrivaraOrderId || params.booking.trivara_order_id,
+        trivara_status: currentShipmentStatus,
+        awb: params.shipmentDetails.awb,
+        courier: params.shipmentDetails.courierName,
+        shipment_id: params.shipmentDetails.shipmentId,
+        synced_at: params.syncedAt,
+      })
+    }
   }
 }
 
@@ -1172,16 +1250,31 @@ export async function syncTrivaraOrderStatus(orderId: string) {
 
   const supabase = await createAdminClient()
   const booking = await getBooking(orderId)
-  const result = await syncTrivaraBookingFromRemote({
-    supabase,
-    booking,
-    source: "manual_sync",
-  })
 
-  if (!result.ok) {
-    throw new Error(result.error)
+  try {
+    const result = await syncTrivaraBookingFromRemote({
+      supabase,
+      booking,
+      source: "manual_sync",
+    })
+
+    if (!result.ok) {
+      console.warn("[TRIVARA_SYNC] Manual sync failed", {
+        orderId,
+        error: result.error,
+      })
+    }
+  } catch (error) {
+    console.error("[TRIVARA_SYNC] Manual sync crashed", {
+      orderId,
+      error,
+    })
   }
-}export async function retryTrivaraBooking(orderId: string) {
+
+  revalidateLogistics(orderId)
+}
+
+export async function retryTrivaraBooking(orderId: string) {
   await retryTrivaraBookingForOrder(orderId)
   revalidateLogistics(orderId)
 }

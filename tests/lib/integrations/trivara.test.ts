@@ -318,7 +318,7 @@ describe("Trivara new dashboard integration", () => {
       newOrderConfig
     )
 
-    expect(payload.paymentMode).toBe("PREPAID")
+    expect(payload.paymentMode).toBe("Prepaid")
     expect(payload.codAmount).toBe(0)
   })
 
@@ -364,7 +364,7 @@ describe("Trivara new dashboard integration", () => {
       newOrderConfig
     )
 
-    expect(payload.paymentMode).toBe("PREPAID")
+    expect(payload.paymentMode).toBe("Prepaid")
     expect(payload.codAmount).toBe(0)
   })
 
