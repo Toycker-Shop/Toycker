@@ -14,6 +14,7 @@ export const metadata: Metadata = {
 }
 
 import { CheckoutProvider } from "@modules/checkout/context/checkout-context"
+import CheckoutEventTracker from "@modules/checkout/components/checkout-event-tracker"
 
 interface CheckoutProps {
   searchParams: Promise<{ cartId?: string; step?: string; error?: string; status?: string }>
@@ -82,6 +83,7 @@ export default async function Checkout({ searchParams }: CheckoutProps) {
 
   return (
     <CheckoutProvider cart={cart}>
+      <CheckoutEventTracker cart={cart} />
       <div className="content-container px-4 py-6 sm:px-6 sm:py-8">
         {/* Heading */}
         <h1 className="text-2xl sm:text-3xl font-bold text-slate-900 mb-4 sm:mb-6">Checkout</h1>

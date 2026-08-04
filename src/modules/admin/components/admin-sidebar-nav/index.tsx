@@ -17,6 +17,7 @@ import {
   ReceiptPercentIcon,
   PhotoIcon,
   MapIcon,
+  MegaphoneIcon,
 } from "@heroicons/react/24/outline"
 import { useHasPermission } from "@/lib/permissions/context"
 import { PERMISSIONS, Permission } from "@/lib/permissions"
@@ -45,6 +46,7 @@ const NAV_ITEMS: NavItemConfig[] = [
   { label: "Team", href: "/admin/team", icon: UsersIcon, permission: PERMISSIONS.TEAM_MANAGE },
   { label: "Discounts", href: "/admin/discounts", icon: ReceiptPercentIcon, permission: PERMISSIONS.DISCOUNTS_READ },
   { label: "Home Settings", href: "/admin/home-settings", icon: PhotoIcon, permission: PERMISSIONS.HOME_SETTINGS_READ },
+  { label: "Marketing", href: "/admin/marketing", icon: MegaphoneIcon, permission: PERMISSIONS.SETTINGS_READ },
 ]
 
 function isActive(pathname: string, href: string): boolean {

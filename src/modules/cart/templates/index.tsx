@@ -10,6 +10,7 @@ import { Cart, CustomerProfile } from "@/lib/supabase/types"
 import { Shield, Truck, RotateCcw, Sparkles } from "lucide-react"
 import LocalizedClientLink from "@modules/common/components/localized-client-link"
 import { useEffect } from "react"
+import CartEventTracker from "@modules/cart/components/cart-event-tracker"
 
 type CartTemplateProps = {
   cart: Cart | null
@@ -36,6 +37,7 @@ const CartTemplate = ({
       <div className="content-container px-3 sm:px-4" data-testid="cart-container">
         {activeCart?.items?.length ? (
           <>
+            <CartEventTracker cart={activeCart} />
             {/* Club Promotion Banner for Non-Members */}
             {!isClubMember && (
               <div className="mb-6 sm:mb-8 bg-gradient-to-r from-amber-50 via-orange-50 to-rose-50 border border-amber-200/50 rounded-xl sm:rounded-2xl p-4 sm:p-5 lg:p-6 shadow-sm">

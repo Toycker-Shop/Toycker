@@ -10,6 +10,7 @@ import {
   OrderPricingMetadata,
 } from "@/lib/util/order-pricing"
 import { getCustomerFacingEmail } from "@/lib/util/customer-email"
+import { sendMetaPurchaseEvent } from "@/lib/integrations/meta-capi"
 
 export const dynamic = "force-dynamic"
 
@@ -344,6 +345,7 @@ export async function POST(request: NextRequest) {
         }
       }
 
+      await sendMetaPurchaseEvent(finalizedOrderData)
       console.log("[PAYU] Order processed successfully:", finalizedOrderData.id)
 
       const response = htmlRedirect(`/order/confirmed/${finalizedOrderData.id}`)

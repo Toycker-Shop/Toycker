@@ -1,22 +1,7 @@
-"use client"
+import { getStorefrontMarketingConfig } from "@/lib/data/marketing"
+import SiteAnalyticsInner from "./site-analytics-inner"
 
-import dynamic from "next/dynamic"
-import { usePathname } from "next/navigation"
-
-const ADMIN_PATH_PREFIX = "/admin"
-
-const SiteAnalyticsInner = dynamic(() => import("./site-analytics-inner"), {
-  ssr: false,
-  loading: () => null,
-})
-
-export default function SiteAnalytics() {
-  const pathname = usePathname()
-  const isAdmin = pathname?.startsWith(ADMIN_PATH_PREFIX)
-
-  if (isAdmin) {
-    return null
-  }
-
-  return <SiteAnalyticsInner />
+export default async function SiteAnalytics() {
+  const config = await getStorefrontMarketingConfig()
+  return <SiteAnalyticsInner config={config} />
 }

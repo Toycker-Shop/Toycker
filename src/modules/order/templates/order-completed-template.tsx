@@ -9,6 +9,7 @@ import CancelOrderButton from "@modules/order/components/cancel-order-button"
 import OrderDetails from "@modules/order/components/order-details"
 import OrderTracking from "@modules/order/components/order-tracking"
 import ShippingDetails from "@modules/order/components/shipping-details"
+import PurchaseEventTracker from "@modules/order/components/purchase-event-tracker"
 import { AlertCircle, Check, XCircle } from "lucide-react"
 
 // Temporarily disabled: customer-side cancellation should stay hidden until the business wants users to cancel orders themselves again.
@@ -74,6 +75,7 @@ export default function OrderCompletedTemplate({
 
   return (
     <div className="py-12 min-h-[calc(100vh-64px)] bg-slate-50/50">
+      <PurchaseEventTracker order={order} enabled={heroContent.state === "confirmed"} />
       {shouldClearCart && <ClearCartOnMount />}
       <div className="content-container flex flex-col justify-center items-center gap-y-8 max-w-4xl h-full w-full">
         <div
