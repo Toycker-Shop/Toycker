@@ -1,6 +1,6 @@
 "use client"
 
-import { useMemo, useState, useTransition } from "react"
+import { useMemo, useState } from "react"
 import { ChartBarIcon, CheckIcon, ClipboardDocumentIcon, GlobeAltIcon, MegaphoneIcon, ShoppingCartIcon } from "@heroicons/react/24/outline"
 import AdminCard from "@modules/admin/components/admin-card"
 import { useOptionalToast } from "@modules/common/context/toast-context"
@@ -9,6 +9,7 @@ import type { MarketingAdminSetting, MarketingProvider, MarketingSettingsForm } 
 
 type MarketingSettingsProps = { initialSettings: MarketingAdminSetting[]; merchantFeedUrl: string }
 type FormState = Record<MarketingProvider, MarketingSettingsForm>
+type MarketingAction = string
 
 const toFormState = (settings: MarketingAdminSetting[]): FormState => {
   const byProvider = new Map(settings.map((setting) => [setting.provider, setting]))
@@ -31,7 +32,7 @@ function StatusText({ setting }: { setting: MarketingAdminSetting }) {
 
 export default function MarketingSettings({ initialSettings, merchantFeedUrl }: MarketingSettingsProps) {
   const [forms, setForms] = useState<FormState>(() => toFormState(initialSettings))
-  const [isPending, startTransition] = useTransition()
+  const [pendingAction, setPendingAction] = useState<MarketingAction | null>(null)
   const [copied, setCopied] = useState(false)
   const toast = useOptionalToast()
   const settingMap = useMemo(() => new Map(initialSettings.map((setting) => [setting.provider, setting])), [initialSettings])
@@ -39,7 +40,11 @@ export default function MarketingSettings({ initialSettings, merchantFeedUrl }: 
   const updateForm = (provider: MarketingProvider, update: Partial<MarketingSettingsForm>) => setForms((current) => ({ ...current, [provider]: { ...current[provider], ...update } }))
 
   const save = (provider: MarketingProvider, verify = false) => {
-    startTransition(async () => {
+    const action: MarketingAction = provider + ":" + (verify ? "verify" : "save")
+    if (pendingAction) return
+
+    setPendingAction(action)
+    void (async () => {
       try {
         await saveMarketingIntegration(provider, forms[provider])
         if (verify) {
@@ -48,8 +53,10 @@ export default function MarketingSettings({ initialSettings, merchantFeedUrl }: 
         } else toast?.showToast("Marketing settings saved", "success")
       } catch (error) {
         toast?.showToast(error instanceof Error ? error.message : "Failed to save marketing settings", "error")
+      } finally {
+        setPendingAction(null)
       }
-    })
+    })()
   }
 
   const copyFeedUrl = async () => {
@@ -71,7 +78,7 @@ export default function MarketingSettings({ initialSettings, merchantFeedUrl }: 
           <Field label="Measurement ID" value={forms.google_analytics.measurementId ?? ""} placeholder="G-XXXXXXXXXX" onChange={(value) => updateForm("google_analytics", { measurementId: value })} />
           <Toggle checked={forms.google_analytics.enabled} onChange={(enabled) => updateForm("google_analytics", { enabled })} label="Enable Google Analytics" />
           {analytics && <StatusText setting={analytics} />}
-          <Actions isPending={isPending} onSave={() => save("google_analytics")} onVerify={() => save("google_analytics", true)} />
+          <Actions provider="google_analytics" pendingAction={pendingAction} onSave={() => save("google_analytics")} onVerify={() => save("google_analytics", true)} />
         </div>
       </AdminCard>
       <AdminCard title="Google Search Console">
@@ -80,7 +87,7 @@ export default function MarketingSettings({ initialSettings, merchantFeedUrl }: 
           <Field label="Verification token" value={forms.search_console.searchConsoleVerificationToken ?? ""} placeholder="Paste the token only" onChange={(value) => updateForm("search_console", { searchConsoleVerificationToken: value })} />
           <Toggle checked={forms.search_console.enabled} onChange={(enabled) => updateForm("search_console", { enabled })} label="Publish verification tag" />
           {searchConsole && <StatusText setting={searchConsole} />}
-          <Actions isPending={isPending} onSave={() => save("search_console")} onVerify={() => save("search_console", true)} />
+          <Actions provider="search_console" pendingAction={pendingAction} onSave={() => save("search_console")} onVerify={() => save("search_console", true)} />
         </div>
       </AdminCard>
       <AdminCard title="Meta Pixel and Conversions API">
@@ -91,7 +98,7 @@ export default function MarketingSettings({ initialSettings, merchantFeedUrl }: 
           <Field label="Test Event Code (optional)" value={forms.meta.metaTestEventCode ?? ""} placeholder="From Meta Events Manager" onChange={(value) => updateForm("meta", { metaTestEventCode: value })} />
           <Toggle checked={forms.meta.enabled} onChange={(enabled) => updateForm("meta", { enabled })} label="Enable Meta tracking" />
           {meta && <StatusText setting={meta} />}
-          <Actions isPending={isPending} onSave={() => save("meta")} onVerify={() => save("meta", true)} />
+          <Actions provider="meta" pendingAction={pendingAction} onSave={() => save("meta")} onVerify={() => save("meta", true)} />
         </div>
       </AdminCard>
       <AdminCard title="Google Merchant Center">
@@ -100,7 +107,7 @@ export default function MarketingSettings({ initialSettings, merchantFeedUrl }: 
           <div className="flex gap-2"><input value={merchantFeedUrl} readOnly className="min-w-0 flex-1 rounded-lg border border-gray-300 bg-gray-50 px-3 py-2 text-sm" /><button type="button" onClick={copyFeedUrl} className="inline-flex items-center gap-2 rounded-lg bg-gray-900 px-3 py-2 text-sm font-medium text-white">{copied ? <CheckIcon className="h-4 w-4" /> : <ClipboardDocumentIcon className="h-4 w-4" />}{copied ? "Copied" : "Copy"}</button></div>
           <ol className="list-decimal space-y-1 pl-5 text-sm text-gray-600"><li>Open Merchant Center and go to Data sources.</li><li>Add products from a file using Scheduled fetch.</li><li>Paste the feed URL and enable free listings.</li></ol>
           {merchant && <StatusText setting={merchant} />}
-          <Actions isPending={isPending} onSave={() => save("merchant_center")} onVerify={() => save("merchant_center", true)} />
+          <Actions provider="merchant_center" pendingAction={pendingAction} onSave={() => save("merchant_center")} onVerify={() => save("merchant_center", true)} />
         </div>
       </AdminCard>
       <div className="grid grid-cols-2 gap-3 text-xs text-gray-500 sm:grid-cols-4"><Info icon={ChartBarIcon} label="GA4 ecommerce" /><Info icon={GlobeAltIcon} label="Search verification" /><Info icon={MegaphoneIcon} label="Meta events" /><Info icon={ShoppingCartIcon} label="Product feed" /></div>
@@ -116,8 +123,14 @@ function Toggle({ checked, onChange, label }: { checked: boolean; onChange: (_va
   return <label className="flex items-center gap-3 text-sm font-medium text-gray-700"><input type="checkbox" checked={checked} onChange={(event) => onChange(event.target.checked)} className="h-4 w-4 rounded border-gray-300" />{label}</label>
 }
 
-function Actions({ isPending, onSave, onVerify }: { isPending: boolean; onSave: () => void; onVerify: () => void }) {
-  return <div className="flex gap-2"><button type="button" disabled={isPending} onClick={onSave} className="rounded-lg bg-gray-900 px-4 py-2 text-sm font-medium text-white disabled:opacity-50">{isPending ? "Saving..." : "Save"}</button><button type="button" disabled={isPending} onClick={onVerify} className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 disabled:opacity-50">Save and check</button></div>
+function Actions({ provider, pendingAction, onSave, onVerify }: { provider: MarketingProvider; pendingAction: MarketingAction | null; onSave: () => void; onVerify: () => void }) {
+  const saveAction: MarketingAction = provider + ":save"
+  const verifyAction: MarketingAction = provider + ":verify"
+  const isSavePending = pendingAction === saveAction
+  const isVerifyPending = pendingAction === verifyAction
+  const isAnotherActionPending = pendingAction !== null && !isSavePending && !isVerifyPending
+
+  return <div className="flex gap-2"><button type="button" disabled={isAnotherActionPending || isSavePending || isVerifyPending} onClick={onSave} className="rounded-lg bg-gray-900 px-4 py-2 text-sm font-medium text-white disabled:opacity-50">{isSavePending ? "Saving..." : "Save"}</button><button type="button" disabled={isAnotherActionPending || isSavePending || isVerifyPending} onClick={onVerify} className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 disabled:opacity-50">{isVerifyPending ? "Checking..." : "Save and check"}</button></div>
 }
 
 function Info({ icon: Icon, label }: { icon: React.ComponentType<{ className?: string }>; label: string }) {
