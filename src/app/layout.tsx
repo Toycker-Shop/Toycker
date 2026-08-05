@@ -4,6 +4,7 @@ import NextTopLoader from "nextjs-toploader"
 import Providers from "./providers"
 import { grandstander, inter } from "@lib/fonts"
 import SiteAnalytics from "@lib/analytics/site-analytics"
+import MarketingVerificationMeta from "@/lib/marketing/marketing-verification-meta"
 import "@/styles/globals.css"
 
 export const metadata: Metadata = {
@@ -31,6 +32,7 @@ export default function RootLayout(props: { children: React.ReactNode }) {
     <html lang="en" data-mode="light" suppressHydrationWarning className={`${grandstander.variable} ${inter.variable}`}>
       <head>
         <link rel="preconnect" href="https://cdn.toycker.in" crossOrigin="anonymous" />
+        <MarketingVerificationMeta />
       </head>
       <body suppressHydrationWarning className="font-sans">
         <NextTopLoader color="#059669" showSpinner={false} height={3} />

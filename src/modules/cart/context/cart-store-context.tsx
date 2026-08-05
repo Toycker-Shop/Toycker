@@ -23,6 +23,7 @@ import {
 import { useLayoutData } from "@modules/layout/context/layout-data-context"
 import { useOptionalToast } from "@modules/common/context/toast-context"
 import { clearStoredCartState, useCartPersistence } from "@lib/hooks/use-cart-persistence"
+import { trackProductEvent } from "@/lib/analytics/client-events"
 
 type OptimisticAddInput = {
   product: CartProductSummary
@@ -283,6 +284,21 @@ export const CartStoreProvider = ({ children }: { children: ReactNode }) => {
 
           if (serverCart) {
             setFromServer(serverCart)
+            if (metadata?.gift_wrap_line !== true) {
+              const price = variant?.price ?? product.price
+              trackProductEvent(
+                "add_to_cart",
+                {
+                  item_id: variant?.sku || variant?.id || product.id,
+                  item_name: product.name,
+                  item_variant: variant?.title,
+                  price,
+                  quantity,
+                },
+                price * quantity,
+                product.currency_code.toUpperCase(),
+              )
+            }
             // Toast removed - silent add for better UX
             return
           }
@@ -376,6 +392,22 @@ export const CartStoreProvider = ({ children }: { children: ReactNode }) => {
 
           if (serverCart) {
             setFromServer(serverCart)
+            for (const input of inputs) {
+              if (input.metadata?.gift_wrap_line === true) continue
+              const price = input.variant?.price ?? input.product.price
+              trackProductEvent(
+                "add_to_cart",
+                {
+                  item_id: input.variant?.sku || input.variant?.id || input.product.id,
+                  item_name: input.product.name,
+                  item_variant: input.variant?.title,
+                  price,
+                  quantity: input.quantity,
+                },
+                price * input.quantity,
+                input.product.currency_code.toUpperCase(),
+              )
+            }
             return
           }
         } catch (error) {

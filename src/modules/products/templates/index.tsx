@@ -12,6 +12,7 @@ import { Product, Region } from "@/lib/supabase/types"
 import ProductActionsWrapper from "./product-actions-wrapper"
 import CustomerReviewsServer from "@modules/products/components/customer-reviews/server"
 import RecentlyViewedTracker from "@modules/products/components/recently-viewed-tracker"
+import ProductViewTracker from "@modules/products/components/product-view-tracker"
 import { getProductReviewStats } from "@/lib/actions/reviews"
 import FrequentlyBoughtTogetherServer from "@modules/products/components/frequently-bought-together/server"
 
@@ -58,7 +59,7 @@ const ProductTemplate = async ({
     offers: {
       "@type": "Offer",
       url: `${baseUrl}/products/${product.handle}`,
-      priceCurrency: "INR",
+      priceCurrency: product.currency_code.toUpperCase(),
       price: product.price,
       availability:
         product.stock_count > 0
@@ -207,6 +208,7 @@ const ProductTemplate = async ({
       </LazyLoadSection>
 
       <RecentlyViewedTracker productId={product.id} />
+      <ProductViewTracker product={product} variant={product.variants?.[0]} />
     </>
   )
 }

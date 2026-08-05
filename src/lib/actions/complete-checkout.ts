@@ -4,9 +4,10 @@ import { z } from "zod"
 import { revalidateTag } from "next/cache"
 import { createClient } from "@/lib/supabase/server"
 import { createAdminClient } from "@/lib/supabase/admin"
-import { PaymentCollection } from "@/lib/supabase/types"
+import { Order, PaymentCollection } from "@/lib/supabase/types"
 import { resolveCustomerPhone } from "@/lib/util/customer-contact-phone"
 import { getCheckoutPhoneValue } from "@/lib/util/customer-phone"
+import { sendMetaPurchaseEvent } from "@/lib/integrations/meta-capi"
 
 // Validation schema for checkout data
 const AddressSchema = z.object({
@@ -282,6 +283,7 @@ export async function completeCheckout(
           checkoutData.rewardsToApply
         )
       }
+      await sendMetaPurchaseEvent(orderData as unknown as Order)
     }
 
     // Cart clearing is handled by ClearCartOnMount on the confirmation page
