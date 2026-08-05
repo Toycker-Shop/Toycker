@@ -79,3 +79,6 @@ supabase/.temp/
 supabase/backups/
 supabase/prod/backups/
 supabase/dev/backups/
+
+# project documentation
+/docs/
