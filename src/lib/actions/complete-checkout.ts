@@ -2,6 +2,7 @@
 
 import { z } from "zod"
 import { revalidateTag } from "next/cache"
+import { cookies } from "next/headers"
 import { createClient } from "@/lib/supabase/server"
 import { createAdminClient } from "@/lib/supabase/admin"
 import { Order, PaymentCollection } from "@/lib/supabase/types"
@@ -61,6 +62,10 @@ function normalizeOptionalValue(value: string | null | undefined): string | null
 
 function isBlank(value: string | null | undefined): boolean {
   return !value?.trim()
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value)
 }
 
 function resolveLockedBillingPhone(
@@ -140,6 +145,59 @@ export async function completeCheckout(
       },
     }
 
+    const orderSupabase = await createAdminClient()
+    const requestCookies = await cookies()
+    const marketingIdentifiers: Record<string, string> = {}
+    const fbp = requestCookies.get("_fbp")?.value.trim()
+    const fbc = requestCookies.get("_fbc")?.value.trim()
+
+    if (fbp) marketingIdentifiers.fbp = fbp
+    if (fbc) marketingIdentifiers.fbc = fbc
+
+    if (Object.keys(marketingIdentifiers).length > 0) {
+      const { data: cartMetadataRow, error: cartMetadataError } =
+        await orderSupabase
+          .from("carts")
+          .select("metadata")
+          .eq("id", checkoutData.cartId)
+          .maybeSingle()
+
+      if (cartMetadataError) {
+        console.warn(
+          "Failed to read cart metadata for Meta identifiers:",
+          cartMetadataError,
+        )
+      } else {
+        const existingMetadata = isRecord(cartMetadataRow?.metadata)
+          ? cartMetadataRow.metadata
+          : {}
+        const existingMarketing = isRecord(existingMetadata.marketing)
+          ? existingMetadata.marketing
+          : {}
+
+        const { error: cartMetadataUpdateError } = await orderSupabase
+          .from("carts")
+          .update({
+            metadata: {
+              ...existingMetadata,
+              marketing: {
+                ...existingMarketing,
+                ...marketingIdentifiers,
+              },
+            },
+            updated_at: new Date().toISOString(),
+          })
+          .eq("id", checkoutData.cartId)
+
+        if (cartMetadataUpdateError) {
+          console.warn(
+            "Failed to persist Meta identifiers on cart:",
+            cartMetadataUpdateError,
+          )
+        }
+      }
+    }
+
     // Step 1: Initialize payment session (generates client secrets, PayU/Easebuzz hashes, etc.)
     // This updates the cart in the DB with the necessary payment data
     const { initiatePaymentSession } = await import("@lib/data/cart")
@@ -168,7 +226,6 @@ export async function completeCheckout(
 
     // Step 3: Call Supabase RPC function for atomic order creation
     // The RPC will now find the initialized payment session data in the cart record
-    const orderSupabase = await createAdminClient()
     const { data: result, error } = await orderSupabase.rpc(
       "create_order_with_payment",
       {
