@@ -14,6 +14,13 @@ type MetaIntegration = {
 type MetaUserData = {
   em?: string[]
   ph?: string[]
+  external_id?: string[]
+  fn?: string[]
+  ln?: string[]
+  ct?: string[]
+  st?: string[]
+  zp?: string[]
+  country?: string[]
   fbp?: string
   fbc?: string
 }
@@ -44,10 +51,30 @@ type MetaPurchaseEvent = {
 const sha256 = (value: string): string =>
   createHash("sha256").update(value).digest("hex")
 
-const hashEmail = (value: string): string => sha256(value.trim().toLowerCase())
+const normalizeMatchValue = (
+  value: string | null | undefined,
+): string | undefined => {
+  const normalized = value?.trim().toLowerCase()
+  return normalized || undefined
+}
 
-const hashPhone = (value: string): string =>
-  sha256(value.replace(/[^0-9]/g, ""))
+const hashMatchValue = (
+  value: string | null | undefined,
+): string | undefined => {
+  const normalized = normalizeMatchValue(value)
+  return normalized ? sha256(normalized) : undefined
+}
+
+const hashEmail = (value: string | null | undefined): string | undefined =>
+  hashMatchValue(value)
+
+const hashPhone = (value: string | null | undefined): string | undefined => {
+  const normalized = value?.replace(/[^0-9]/g, "")
+  return normalized ? sha256(normalized) : undefined
+}
+
+const asHashedList = (value: string | undefined): string[] | undefined =>
+  value ? [value] : undefined
 
 const getMarketingValue = (
   metadata: Record<string, unknown> | null,
@@ -120,11 +147,19 @@ export async function sendMetaPurchaseEvent(order: Order): Promise<void> {
   )
 
   const items = getOrderItems(order)
+  const customerAddress = order.billing_address ?? order.shipping_address
+  const hashedEmail = hashEmail(order.customer_email)
+  const hashedPhone = hashPhone(customerAddress?.phone)
   const userData: MetaUserData = {
-    em: order.customer_email ? [hashEmail(order.customer_email)] : undefined,
-    ph: order.billing_address?.phone
-      ? [hashPhone(order.billing_address.phone)]
-      : undefined,
+    em: asHashedList(hashedEmail),
+    ph: asHashedList(hashedPhone),
+    external_id: asHashedList(hashMatchValue(order.user_id)),
+    fn: asHashedList(hashMatchValue(customerAddress?.first_name)),
+    ln: asHashedList(hashMatchValue(customerAddress?.last_name)),
+    ct: asHashedList(hashMatchValue(customerAddress?.city)),
+    st: asHashedList(hashMatchValue(customerAddress?.province)),
+    zp: asHashedList(hashMatchValue(customerAddress?.postal_code)),
+    country: asHashedList(hashMatchValue(customerAddress?.country_code)),
     fbp: getMarketingValue(order.metadata, "fbp"),
     fbc: getMarketingValue(order.metadata, "fbc"),
   }
