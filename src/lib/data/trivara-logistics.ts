@@ -244,8 +244,8 @@ export async function getTrivaraLogisticsRecords(
     .select(
       `*, orders!inner(id, display_id, customer_email, status, payment_method, payment_status, total_amount, currency_code, created_at, shipping_address, tracking_number, metadata)`
     )
-    .order("created_at", { referencedTable: "orders", ascending: false })
-    .order("updated_at", { ascending: false })
+    .order("orders(created_at)", { ascending: false })
+    .order("orders(display_id)", { ascending: false })
     .range(from, to)
 
   if (status === "pending") {
@@ -569,20 +569,32 @@ function hasWebhookOrderIdentifier(identifiers: TrivaraWebhookIdentifiers): bool
   )
 }
 
+function isLegacyTrivaraNumericOrderId(value: string | null): boolean {
+  return Boolean(value?.trim() && /^\d+$/.test(value.trim()))
+}
+
 function getTrivaraApiOrderIdFromBooking(
   booking: Pick<
     TrivaraOrderBooking,
     "trivara_order_id" | "response_payload"
   >
 ): string | null {
+  const responseApiOrderId = extractTrivaraApiOrderId(booking.response_payload)
+
+  if (responseApiOrderId && !isLegacyTrivaraNumericOrderId(responseApiOrderId)) {
+    return responseApiOrderId
+  }
+
   const visibleTrivaraOrderId =
     booking.trivara_order_id || extractTrivaraOrderId(booking.response_payload)
   const fallbackApiOrderId =
-    visibleTrivaraOrderId && !visibleTrivaraOrderId.toUpperCase().startsWith("TRV-")
+    visibleTrivaraOrderId &&
+    !visibleTrivaraOrderId.toUpperCase().startsWith("TRV-") &&
+    !isLegacyTrivaraNumericOrderId(visibleTrivaraOrderId)
       ? visibleTrivaraOrderId
       : null
 
-  return extractTrivaraApiOrderId(booking.response_payload) || fallbackApiOrderId
+  return fallbackApiOrderId
 }
 
 async function createTrivaraWebhookEvent(
@@ -1212,6 +1224,7 @@ export async function syncRecentTrivaraBookings(
     .from("trivara_order_bookings")
     .select("*")
     .in("status", ["pending", "new_order", "booked"])
+    .not("trivara_order_id", "is", null)
     .order("tracking_synced_at", { ascending: true, nullsFirst: true })
     .order("updated_at", { ascending: false })
     .limit(safeLimit)

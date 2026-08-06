@@ -36,8 +36,14 @@ const STATUS_FILTERS: Array<{
 ]
 
 function formatRemoteStatus(record: {
+  status: TrivaraOrderBookingStatus
+  trivara_order_id: string | null
   trivara_order_status: string | null
 }) {
+  if (record.status === "booked" && !record.trivara_order_id) {
+    return "Legacy Booked"
+  }
+
   const value = record.trivara_order_status?.trim()
 
   if (!value) {
@@ -56,7 +62,15 @@ function formatRemoteStatus(record: {
     .replace(/\b\w/g, (letter) => letter.toUpperCase())
 }
 
-function getRemoteStatusBadgeVariant(status: string | null) {
+function getRemoteStatusBadgeVariant(
+  status: string | null,
+  bookingStatus: TrivaraOrderBookingStatus,
+  trivaraOrderId: string | null
+) {
+  if (bookingStatus === "booked" && !trivaraOrderId) {
+    return "neutral" as const
+  }
+
   const normalized = status?.trim().toLowerCase().replace(/[\s-]+/g, "_") || ""
 
   if (!normalized) {
@@ -292,7 +306,7 @@ export default async function AdminLogistics({
                     {formatIST(record.updated_at)}
                   </td>
                   <td className="px-6 py-4">
-                    <AdminBadge variant={getRemoteStatusBadgeVariant(record.trivara_order_status)}>
+                    <AdminBadge variant={getRemoteStatusBadgeVariant(record.trivara_order_status, record.status, record.trivara_order_id)}>
                       {formatRemoteStatus(record)}
                     </AdminBadge>
                   </td>
