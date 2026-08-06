@@ -244,8 +244,8 @@ export async function getTrivaraLogisticsRecords(
     .select(
       `*, orders!inner(id, display_id, customer_email, status, payment_method, payment_status, total_amount, currency_code, created_at, shipping_address, tracking_number, metadata)`
     )
-    .order("created_at", { referencedTable: "orders", ascending: false })
-    .order("display_id", { referencedTable: "orders", ascending: false })
+    .order("orders(created_at)", { ascending: false })
+    .order("orders(display_id)", { ascending: false })
     .range(from, to)
 
   if (status === "pending") {
