@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect } from "react"
+import { useEffect, useRef } from "react"
 
 import { Product, ProductVariant } from "@/lib/supabase/types"
 import { trackProductEvent } from "@/lib/analytics/client-events"
@@ -11,20 +11,29 @@ type ProductViewTrackerProps = {
 }
 
 export default function ProductViewTracker({ product, variant }: ProductViewTrackerProps) {
+  const trackedProductKey = useRef<string | null>(null)
+  const productKey = `${product.id}:${variant?.sku || variant?.id || "default"}`
+  const itemId = variant?.sku || variant?.id || product.id
+  const price = variant?.price ?? product.price
+  const currency = product.currency_code.toUpperCase()
+
   useEffect(() => {
+    if (trackedProductKey.current === productKey) return
+    trackedProductKey.current = productKey
+
     trackProductEvent(
       "view_item",
       {
-        item_id: variant?.sku || variant?.id || product.id,
+        item_id: itemId,
         item_name: product.name,
         item_variant: variant?.title,
-        price: variant?.price ?? product.price,
+        price,
         quantity: 1,
       },
-      variant?.price ?? product.price,
-      product.currency_code.toUpperCase()
+      price,
+      currency,
     )
-  }, [product, variant])
+  }, [currency, itemId, price, product.name, productKey, variant?.title])
 
   return null
 }

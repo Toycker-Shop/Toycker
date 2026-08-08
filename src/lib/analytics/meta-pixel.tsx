@@ -4,7 +4,10 @@ import { useEffect, useRef } from "react"
 import { usePathname } from "next/navigation"
 import Script from "next/script"
 
+import { flushPendingMetaEvents } from "@/lib/analytics/client-events"
+
 const META_PIXEL_BASE_SCRIPT_ID = "meta-pixel-base"
+const META_PIXEL_READY_EVENT = "meta-pixel-ready"
 const ADMIN_PATH_PREFIX = "/admin"
 
 type MetaPixelFn = (_command: "init" | "track", ..._args: unknown[]) => void
@@ -28,6 +31,7 @@ s.parentNode.insertBefore(t,s)}(window, document,'script',
 'https://connect.facebook.net/en_US/fbevents.js');
 fbq('init', '${pixelId}');
 fbq('track', 'PageView');
+window.dispatchEvent(new Event('${META_PIXEL_READY_EVENT}'));
 `
 
 export default function MetaPixel({ pixelId, enabled }: { pixelId: string | null; enabled: boolean }) {
@@ -35,6 +39,16 @@ export default function MetaPixel({ pixelId, enabled }: { pixelId: string | null
   const hasTrackedInitialPage = useRef(false)
   const hasPixelId = enabled && Boolean(pixelId)
   const isEnabledRoute = isMetaPixelRouteEnabled(pathname)
+
+  useEffect(() => {
+    if (!hasPixelId || !isEnabledRoute) return
+
+    const handlePixelReady = () => flushPendingMetaEvents()
+    handlePixelReady()
+    window.addEventListener(META_PIXEL_READY_EVENT, handlePixelReady)
+
+    return () => window.removeEventListener(META_PIXEL_READY_EVENT, handlePixelReady)
+  }, [hasPixelId, isEnabledRoute])
 
   useEffect(() => {
     if (!hasPixelId || !isEnabledRoute) return
