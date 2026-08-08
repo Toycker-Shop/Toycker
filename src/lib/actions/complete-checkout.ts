@@ -1,8 +1,9 @@
 "use server"
 
+import { isIP } from "node:net"
 import { z } from "zod"
 import { revalidateTag } from "next/cache"
-import { cookies } from "next/headers"
+import { cookies, headers } from "next/headers"
 import { createClient } from "@/lib/supabase/server"
 import { createAdminClient } from "@/lib/supabase/admin"
 import { Order, PaymentCollection } from "@/lib/supabase/types"
@@ -66,6 +67,13 @@ function isBlank(value: string | null | undefined): boolean {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value)
+}
+
+function getClientIp(requestHeaders: Headers): string | undefined {
+  const forwardedIp = requestHeaders.get("x-forwarded-for")?.split(",")[0]?.trim()
+  const directIp = requestHeaders.get("x-real-ip")?.trim()
+  const candidate = forwardedIp || directIp
+  return candidate && isIP(candidate) ? candidate : undefined
 }
 
 function resolveLockedBillingPhone(
@@ -147,12 +155,17 @@ export async function completeCheckout(
 
     const orderSupabase = await createAdminClient()
     const requestCookies = await cookies()
+    const requestHeaders = await headers()
     const marketingIdentifiers: Record<string, string> = {}
     const fbp = requestCookies.get("_fbp")?.value.trim()
     const fbc = requestCookies.get("_fbc")?.value.trim()
+    const clientIp = getClientIp(requestHeaders)
+    const clientUserAgent = requestHeaders.get("user-agent")?.trim()
 
     if (fbp) marketingIdentifiers.fbp = fbp
     if (fbc) marketingIdentifiers.fbc = fbc
+    if (clientIp) marketingIdentifiers.client_ip_address = clientIp
+    if (clientUserAgent) marketingIdentifiers.client_user_agent = clientUserAgent
 
     if (Object.keys(marketingIdentifiers).length > 0) {
       const { data: cartMetadataRow, error: cartMetadataError } =

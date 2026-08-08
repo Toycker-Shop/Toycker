@@ -11,7 +11,7 @@ type MetaIntegration = {
   meta_test_event_code: string | null
 }
 
-type MetaUserData = {
+export type MetaUserData = {
   em?: string[]
   ph?: string[]
   external_id?: string[]
@@ -23,6 +23,8 @@ type MetaUserData = {
   country?: string[]
   fbp?: string
   fbc?: string
+  client_ip_address?: string
+  client_user_agent?: string
 }
 
 type MetaContent = {
@@ -45,6 +47,7 @@ type MetaPurchaseEvent = {
     content_ids: string[]
     content_type: "product"
     num_items: number
+    order_id: string
   }
 }
 
@@ -68,8 +71,30 @@ const hashMatchValue = (
 const hashEmail = (value: string | null | undefined): string | undefined =>
   hashMatchValue(value)
 
-const hashPhone = (value: string | null | undefined): string | undefined => {
-  const normalized = value?.replace(/[^0-9]/g, "")
+export const normalizeMetaPhone = (
+  value: string | null | undefined,
+  countryCode: string | null | undefined,
+): string | undefined => {
+  const digits = value?.replace(/[^0-9]/g, "")
+  if (!digits) return undefined
+
+  const withoutInternationalPrefix = digits.startsWith("00")
+    ? digits.slice(2)
+    : digits
+  const normalizedCountryCode = countryCode?.trim().toLowerCase()
+
+  if (normalizedCountryCode === "in" && withoutInternationalPrefix.length === 10) {
+    return `91${withoutInternationalPrefix}`
+  }
+
+  return withoutInternationalPrefix
+}
+
+const hashPhone = (
+  value: string | null | undefined,
+  countryCode: string | null | undefined,
+): string | undefined => {
+  const normalized = normalizeMetaPhone(value, countryCode)
   return normalized ? sha256(normalized) : undefined
 }
 
@@ -89,13 +114,38 @@ const getMarketingValue = (
 const getOrderItems = (order: Order): CartItem[] =>
   (order.items ?? []).filter((item) => item.metadata?.gift_wrap_line !== true)
 
+export const buildMetaUserData = (order: Order): MetaUserData => {
+  const customerAddress = order.billing_address ?? order.shipping_address
+  const hashedEmail = hashEmail(order.customer_email)
+  const hashedPhone = hashPhone(
+    customerAddress?.phone,
+    customerAddress?.country_code,
+  )
+
+  return {
+    em: asHashedList(hashedEmail),
+    ph: asHashedList(hashedPhone),
+    external_id: asHashedList(hashMatchValue(order.user_id)),
+    fn: asHashedList(hashMatchValue(customerAddress?.first_name)),
+    ln: asHashedList(hashMatchValue(customerAddress?.last_name)),
+    ct: asHashedList(hashMatchValue(customerAddress?.city)),
+    st: asHashedList(hashMatchValue(customerAddress?.province)),
+    zp: asHashedList(hashMatchValue(customerAddress?.postal_code)),
+    country: asHashedList(hashMatchValue(customerAddress?.country_code)),
+    fbp: getMarketingValue(order.metadata, "fbp"),
+    fbc: getMarketingValue(order.metadata, "fbc"),
+    client_ip_address: getMarketingValue(order.metadata, "client_ip_address"),
+    client_user_agent: getMarketingValue(order.metadata, "client_user_agent"),
+  }
+}
+
 const markDelivery = async (
   eventId: string,
   status: "sent" | "failed",
   errorMessage?: string,
-) => {
+): Promise<void> => {
   const supabase = await createAdminClient()
-  await supabase
+  const { error } = await supabase
     .from("marketing_event_deliveries")
     .update({
       status,
@@ -106,7 +156,14 @@ const markDelivery = async (
     .eq("provider", "meta")
     .eq("event_name", "Purchase")
     .eq("event_id", eventId)
+
+  if (error) {
+    console.warn("Failed to update Meta delivery status:", error)
+  }
 }
+
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === "object" && value !== null && !Array.isArray(value)
 
 export async function sendMetaPurchaseEvent(order: Order): Promise<void> {
   const supabase = await createAdminClient()
@@ -133,7 +190,7 @@ export async function sendMetaPurchaseEvent(order: Order): Promise<void> {
     return
   }
 
-  await supabase.from("marketing_event_deliveries").upsert(
+  const { error: deliveryUpsertError } = await supabase.from("marketing_event_deliveries").upsert(
     {
       provider: "meta",
       event_name: "Purchase",
@@ -146,23 +203,11 @@ export async function sendMetaPurchaseEvent(order: Order): Promise<void> {
     { onConflict: "provider,event_name,event_id" },
   )
 
-  const items = getOrderItems(order)
-  const customerAddress = order.billing_address ?? order.shipping_address
-  const hashedEmail = hashEmail(order.customer_email)
-  const hashedPhone = hashPhone(customerAddress?.phone)
-  const userData: MetaUserData = {
-    em: asHashedList(hashedEmail),
-    ph: asHashedList(hashedPhone),
-    external_id: asHashedList(hashMatchValue(order.user_id)),
-    fn: asHashedList(hashMatchValue(customerAddress?.first_name)),
-    ln: asHashedList(hashMatchValue(customerAddress?.last_name)),
-    ct: asHashedList(hashMatchValue(customerAddress?.city)),
-    st: asHashedList(hashMatchValue(customerAddress?.province)),
-    zp: asHashedList(hashMatchValue(customerAddress?.postal_code)),
-    country: asHashedList(hashMatchValue(customerAddress?.country_code)),
-    fbp: getMarketingValue(order.metadata, "fbp"),
-    fbc: getMarketingValue(order.metadata, "fbc"),
+  if (deliveryUpsertError) {
+    console.warn("Failed to create Meta delivery record:", deliveryUpsertError)
   }
+
+  const items = getOrderItems(order)
   const contents = items.map((item) => ({
     id: item.variant?.sku || item.variant_id || item.product_id,
     quantity: item.quantity,
@@ -174,7 +219,7 @@ export async function sendMetaPurchaseEvent(order: Order): Promise<void> {
     event_id: order.id,
     event_source_url: `${getBaseURL()}/order/confirmed/${order.id}`,
     action_source: "website",
-    user_data: userData,
+    user_data: buildMetaUserData(order),
     custom_data: {
       currency: order.currency_code.toUpperCase(),
       value: order.total_amount,
@@ -182,6 +227,7 @@ export async function sendMetaPurchaseEvent(order: Order): Promise<void> {
       content_ids: contents.map((content) => content.id),
       content_type: "product",
       num_items: items.reduce((total, item) => total + item.quantity, 0),
+      order_id: order.id,
     },
   }
 
@@ -202,6 +248,13 @@ export async function sendMetaPurchaseEvent(order: Order): Promise<void> {
     if (!response.ok) {
       const responseText = await response.text()
       await markDelivery(order.id, "failed", `Meta API ${response.status}: ${responseText.slice(0, 500)}`)
+      return
+    }
+
+    const responseData: unknown = await response.json()
+    const eventsReceived = isRecord(responseData) ? responseData.events_received : undefined
+    if (typeof eventsReceived !== "number" || eventsReceived < 1) {
+      await markDelivery(order.id, "failed", "Meta API accepted the request but reported no received events")
       return
     }
 
