@@ -25,6 +25,7 @@ export default function ProductViewTracker({ product, variant }: ProductViewTrac
       "view_item",
       {
         item_id: itemId,
+        meta_content_id: product.id,
         item_name: product.name,
         item_variant: variant?.title,
         price,
@@ -33,7 +34,7 @@ export default function ProductViewTracker({ product, variant }: ProductViewTrac
       price,
       currency,
     )
-  }, [currency, itemId, price, product.name, productKey, variant?.title])
+  }, [currency, itemId, price, product.id, product.name, productKey, variant?.title])
 
   return null
 }

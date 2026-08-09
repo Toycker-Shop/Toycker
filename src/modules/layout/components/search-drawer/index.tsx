@@ -23,6 +23,7 @@ import { MIN_SEARCH_QUERY_LENGTH } from "@/lib/constants/search"
 import type { SearchProductSummary, SearchCategorySummary, SearchCollectionSummary } from "@lib/data/search"
 import { fixUrl } from "@lib/util/images"
 import { useImageSearchStore } from "@/lib/store/image-search-store"
+import { trackSearchEvent } from "@/lib/analytics/client-events"
 
 type SearchDrawerProps = {
   isOpen: boolean
@@ -115,6 +116,7 @@ const SearchDrawer = ({ isOpen, onClose }: SearchDrawerProps) => {
       return
     }
 
+    trackSearchEvent(normalizedQuery)
     router.push(buildLocalizedPath(`/store?q=${encodeURIComponent(normalizedQuery)}`))
     handleClose()
   }
