@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation"
 import Script from "next/script"
 
 import { flushPendingMetaEvents } from "@/lib/analytics/client-events"
+import { ensureMetaMarketingIdentifiers } from "@/lib/analytics/meta-identifiers"
 
 const META_PIXEL_BASE_SCRIPT_ID = "meta-pixel-base"
 const META_PIXEL_READY_EVENT = "meta-pixel-ready"
@@ -42,6 +43,8 @@ export default function MetaPixel({ pixelId, enabled }: { pixelId: string | null
 
   useEffect(() => {
     if (!hasPixelId || !isEnabledRoute) return
+
+    ensureMetaMarketingIdentifiers()
 
     const handlePixelReady = () => flushPendingMetaEvents()
     handlePixelReady()

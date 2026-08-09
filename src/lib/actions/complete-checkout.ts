@@ -157,11 +157,13 @@ export async function completeCheckout(
     const requestCookies = await cookies()
     const requestHeaders = await headers()
     const marketingIdentifiers: Record<string, string> = {}
+    const visitorId = requestCookies.get("toycker_meta_visitor_id")?.value.trim()
     const fbp = requestCookies.get("_fbp")?.value.trim()
     const fbc = requestCookies.get("_fbc")?.value.trim()
     const clientIp = getClientIp(requestHeaders)
     const clientUserAgent = requestHeaders.get("user-agent")?.trim()
 
+    if (visitorId) marketingIdentifiers.visitor_id = visitorId
     if (fbp) marketingIdentifiers.fbp = fbp
     if (fbc) marketingIdentifiers.fbc = fbc
     if (clientIp) marketingIdentifiers.client_ip_address = clientIp

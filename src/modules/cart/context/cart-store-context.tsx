@@ -290,6 +290,7 @@ export const CartStoreProvider = ({ children }: { children: ReactNode }) => {
                 "add_to_cart",
                 {
                   item_id: variant?.sku || variant?.id || product.id,
+                  meta_content_id: product.id,
                   item_name: product.name,
                   item_variant: variant?.title,
                   price,
@@ -399,6 +400,7 @@ export const CartStoreProvider = ({ children }: { children: ReactNode }) => {
                 "add_to_cart",
                 {
                   item_id: input.variant?.sku || input.variant?.id || input.product.id,
+                  meta_content_id: input.product.id,
                   item_name: input.product.name,
                   item_variant: input.variant?.title,
                   price,

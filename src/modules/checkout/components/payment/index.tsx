@@ -15,10 +15,11 @@ import { convertToLocale } from "@lib/util/money"
 import { Text } from "@modules/common/components/text"
 import ErrorMessage from "@modules/checkout/components/error-message"
 import PaymentContainer from "@modules/checkout/components/payment-container"
-import { useEffect, useMemo, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 import { Cart } from "@/lib/supabase/types"
 import type { PartialPaymentRule } from "@/lib/supabase/types"
 import { useCheckout } from "../../context/checkout-context"
+import { trackAddPaymentInfoEvent } from "@/lib/analytics/client-events"
 
 const StripeCardContainer = dynamic(
   () => import("@modules/checkout/components/payment-container/stripe-card-container"),
@@ -41,6 +42,7 @@ const Payment = ({
   const { state, setPaymentMethod } = useCheckout()
 
   const [error, setError] = useState<string | null>(null)
+  const trackedPaymentMethods = useRef<Set<string>>(new Set())
 
   const paidByGiftcard = (cart.gift_card_total ?? 0) > 0 && cart.total === 0
   const selectedPaymentMethod = isTemporarilyDisabledPaymentMethod(
@@ -73,6 +75,22 @@ const Payment = ({
     }
 
     setError(null)
+    if (!trackedPaymentMethods.current.has(method)) {
+      const items = (cart.items ?? [])
+        .filter((item) => item.metadata?.gift_wrap_line !== true)
+        .map((item) => ({
+          item_id: item.variant?.sku || item.variant_id || item.product_id,
+          meta_content_id: item.product_id,
+          item_name: item.product_title || item.title,
+          item_variant: item.variant?.title,
+          price: item.unit_price,
+          quantity: item.quantity,
+        }))
+      if (items.length > 0) {
+        trackAddPaymentInfoEvent(items, cart.total ?? cart.subtotal ?? 0, cart.currency_code.toUpperCase())
+      }
+      trackedPaymentMethods.current.add(method)
+    }
     setPaymentMethod(method)
   }
 

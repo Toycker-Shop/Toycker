@@ -97,20 +97,17 @@ const loadStorefrontMarketingConfig = async (): Promise<StorefrontMarketingConfi
   const analytics = rowMap.get("google_analytics")
   const searchConsole = rowMap.get("search_console")
   const meta = rowMap.get("meta")
-  const envMetaPixelId = process.env.NEXT_PUBLIC_META_PIXEL_ID?.trim() || null
-
   return {
     googleAnalyticsMeasurementId:
       analytics?.enabled && analytics.measurement_id
         ? analytics.measurement_id
         : null,
-    metaPixelId:
-      meta?.enabled && meta.pixel_id ? meta.pixel_id : envMetaPixelId,
+    metaPixelId: meta?.enabled && meta.pixel_id ? meta.pixel_id : null,
     searchConsoleVerificationToken:
       searchConsole?.enabled && searchConsole.search_console_verification_token
         ? searchConsole.search_console_verification_token
         : null,
-    metaEnabled: Boolean(meta?.enabled && meta.pixel_id) || Boolean(envMetaPixelId),
+    metaEnabled: Boolean(meta?.enabled && meta.pixel_id),
     merchantFeedUrl: `${getBaseURL()}/merchant-feed.xml`,
   }
 }
