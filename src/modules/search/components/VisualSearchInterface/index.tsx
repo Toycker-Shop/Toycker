@@ -193,6 +193,7 @@ export default function VisualSearchInterface() {
                     type="file"
                     ref={fileInputRef}
                     onChange={handleFileSelect}
+                    capture={'environment'}
                     accept="image/*"
                     className="hidden"
                 />
@@ -271,6 +272,7 @@ export default function VisualSearchInterface() {
                                 type="file"
                                 ref={fileInputRef}
                                 onChange={handleFileSelect}
+                                capture={'environment'}
                                 accept="image/*"
                                 className="hidden"
                             />

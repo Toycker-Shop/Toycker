@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server"
 import { generateImageEmbedding } from "@/lib/ml/embeddings"
 import {
     SEARCH_IMAGE_MAX_UPLOAD_BYTES,
+    SEARCH_IMAGE_MATCH_THRESHOLD,
     SEARCH_IMAGE_RESULT_LIMIT,
 } from "@/lib/constants/search"
 import {
@@ -10,6 +11,8 @@ import {
     getClientIpFromHeaders,
 } from "@/lib/util/request-rate-limit"
 import sharp from "sharp"
+
+import { rankVisualSearchProducts } from '@/lib/search/visual-ranking'
 
 interface SearchProduct {
     id: string
@@ -192,7 +195,7 @@ export async function POST(request: Request) {
         const { data, error } = await supabase.rpc("search_products_multimodal", {
             search_query: null,
             search_embedding: embedding,
-            match_threshold: 0.65,
+            match_threshold: SEARCH_IMAGE_MATCH_THRESHOLD,
             match_count: SEARCH_IMAGE_RESULT_LIMIT,
         })
 
@@ -215,11 +218,13 @@ export async function POST(request: Request) {
             relevance_score: p.relevance_score,
         }))
 
+        const rankedProducts = rankVisualSearchProducts(products)
+
         return NextResponse.json({
-            products,
+            products: rankedProducts,
             metadata: {
-                total: products.length,
-                threshold: 0.65,
+                total: rankedProducts.length,
+                threshold: SEARCH_IMAGE_MATCH_THRESHOLD,
             },
         })
     } catch (error) {

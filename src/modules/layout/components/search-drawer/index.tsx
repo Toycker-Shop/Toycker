@@ -247,6 +247,7 @@ const SearchDrawer = ({ isOpen, onClose }: SearchDrawerProps) => {
                         accept="image/*"
                         className="hidden"
                         onChange={handleImageUpload}
+                        capture={'environment'}
                       />
                     </div>
                   </div>
