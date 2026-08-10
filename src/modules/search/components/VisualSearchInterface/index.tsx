@@ -15,7 +15,6 @@ import {
     SEARCH_IMAGE_CLIENT_MAX_DIMENSION,
     SEARCH_IMAGE_UPLOAD_QUALITY,
 } from "@/lib/constants/search"
-import VisualSearchCapture, { isCoarsePointerDevice } from "@modules/search/components/visual-search-capture"
 
 // Define types for results based on the API response
 interface SearchProduct {
@@ -49,7 +48,6 @@ export default function VisualSearchInterface() {
     const [error, setError] = useState<string | null>(null)
     const [hasInteracted, setHasInteracted] = useState(false)
     const [isMounted, setIsMounted] = useState(false)
-    const [isCaptureOpen, setIsCaptureOpen] = useState(false)
     const imgRef = useRef<HTMLImageElement>(null)
     const fileInputRef = useRef<HTMLInputElement>(null)
     const abortControllerRef = useRef<AbortController | null>(null)
@@ -62,30 +60,18 @@ export default function VisualSearchInterface() {
         }
     }, [])
 
-    const handleSelectedImage = (selectedFile: File) => {
-        abortControllerRef.current?.abort()
-        setResults(null)
-        setHasInteracted(false)
-        setImage(selectedFile)
-    }
-
     const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
         const selectedFile = e.target.files?.[0]
-        if (selectedFile) handleSelectedImage(selectedFile)
-        e.target.value = ""
-    }
-
-    const triggerGalleryInput = () => {
-        fileInputRef.current?.click()
+        if (selectedFile) {
+            abortControllerRef.current?.abort()
+            setResults(null)
+            setHasInteracted(false)
+            setImage(selectedFile)
+        }
     }
 
     const triggerFileInput = () => {
-        if (isCoarsePointerDevice()) {
-            setIsCaptureOpen(true)
-            return
-        }
-
-        triggerGalleryInput()
+        fileInputRef.current?.click()
     }
 
     // Initialize crop when image loads
@@ -198,28 +184,16 @@ export default function VisualSearchInterface() {
         }
     }, [completedCrop, hasInteracted, performSearch])
 
-    const captureDialog = (
-        <VisualSearchCapture
-            isOpen={isCaptureOpen}
-            onClose={() => setIsCaptureOpen(false)}
-            onCapture={(capturedFile) => {
-                handleSelectedImage(capturedFile)
-                setIsCaptureOpen(false)
-            }}
-            onChooseGallery={triggerGalleryInput}
-        />
-    )
-
     if (!isMounted) return null
 
     if (!previewUrl) {
         return (
             <div className="flex flex-col items-center justify-center py-32 px-6">
-                {captureDialog}
                 <input
                     type="file"
                     ref={fileInputRef}
                     onChange={handleFileSelect}
+                    capture={'environment'}
                     accept="image/*"
                     className="hidden"
                 />
@@ -257,7 +231,6 @@ export default function VisualSearchInterface() {
 
     return (
         <div className="mx-auto max-w-[1400px] px-6 py-10">
-            {captureDialog}
             <div className="flex flex-col gap-10 lg:flex-row">
                 {/* Left: Cropper Area (1 Column) */}
                 <div className="w-full lg:w-1/4">
@@ -299,6 +272,7 @@ export default function VisualSearchInterface() {
                                 type="file"
                                 ref={fileInputRef}
                                 onChange={handleFileSelect}
+                                capture={'environment'}
                                 accept="image/*"
                                 className="hidden"
                             />

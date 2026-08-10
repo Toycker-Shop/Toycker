@@ -24,7 +24,6 @@ import type { SearchProductSummary, SearchCategorySummary, SearchCollectionSumma
 import { fixUrl } from "@lib/util/images"
 import { useImageSearchStore } from "@/lib/store/image-search-store"
 import { trackSearchEvent } from "@/lib/analytics/client-events"
-import VisualSearchCapture, { isCoarsePointerDevice } from "@modules/search/components/visual-search-capture"
 
 type SearchDrawerProps = {
   isOpen: boolean
@@ -44,7 +43,6 @@ const SearchDrawer = ({ isOpen, onClose }: SearchDrawerProps) => {
   const router = useRouter()
   const inputRef = useRef<HTMLInputElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
-  const [isCaptureOpen, setIsCaptureOpen] = useState(false)
   const countryCode = DEFAULT_COUNTRY_CODE
   const { previewUrl, setImage, clear: clearImageStore } = useImageSearchStore()
 
@@ -73,29 +71,16 @@ const SearchDrawer = ({ isOpen, onClose }: SearchDrawerProps) => {
     setQuery(text)
   })
 
-  const handleSelectedImage = (file: File) => {
-    setImage(file)
-    router.push("/search/visual")
-    onClose()
-  }
-
   const handleImageUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0]
-    if (file) handleSelectedImage(file)
-    event.target.value = ""
-  }
-
-  const handleImageButtonClick = () => {
-    if (isCoarsePointerDevice()) {
-      setIsCaptureOpen(true)
-      return
+    if (file) {
+      setImage(file)
+      router.push("/search/visual")
+      onClose()
     }
-
-    fileInputRef.current?.click()
   }
 
   const handleClear = () => {
-    setIsCaptureOpen(false)
     clear()
     clearImageStore()
     stopListening()
@@ -249,7 +234,7 @@ const SearchDrawer = ({ isOpen, onClose }: SearchDrawerProps) => {
 
                       <button
                         type="button"
-                        onClick={handleImageButtonClick}
+                        onClick={() => fileInputRef.current?.click()}
                         className={`rounded-full p-2 sm:p-2.5 transition-all duration-300 ${previewUrl ? 'bg-primary text-white shadow-lg transform rotate-6' : 'text-slate-400 hover:bg-slate-50 hover:text-primary'}`}
                         title="Search by image"
                       >
@@ -262,6 +247,7 @@ const SearchDrawer = ({ isOpen, onClose }: SearchDrawerProps) => {
                         accept="image/*"
                         className="hidden"
                         onChange={handleImageUpload}
+                        capture={'environment'}
                       />
                     </div>
                   </div>
@@ -470,13 +456,6 @@ const SearchDrawer = ({ isOpen, onClose }: SearchDrawerProps) => {
               )}
             </Dialog.Panel>
           </Transition.Child>
-
-          <VisualSearchCapture
-            isOpen={isCaptureOpen && isOpen}
-            onClose={() => setIsCaptureOpen(false)}
-            onCapture={handleSelectedImage}
-            onChooseGallery={() => fileInputRef.current?.click()}
-          />
         </div>
       </Dialog>
     </Transition>
