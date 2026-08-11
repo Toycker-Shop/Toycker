@@ -17,7 +17,9 @@ import { ProductCardSkeleton } from "@modules/common/components/skeleton/product
 import { resizeImageCropFromElement } from "@/lib/util/image-processing"
 import LocalizedClientLink from "@modules/common/components/localized-client-link"
 import { fixUrl } from "@lib/util/images"
-import VisualSearchCapture from "@modules/search/components/visual-search-capture"
+import VisualSearchCapture, {
+  type VisualSearchCaptureHandle,
+} from "@modules/search/components/visual-search-capture"
 import {
   SEARCH_IMAGE_CLIENT_MAX_DIMENSION,
   SEARCH_IMAGE_UPLOAD_QUALITY,
@@ -56,9 +58,8 @@ export default function VisualSearchInterface() {
   const [hasInteracted, setHasInteracted] = useState(false)
   const [isMounted, setIsMounted] = useState(false)
   const [isCaptureOpen, setIsCaptureOpen] = useState(false)
-  const [captureStartsWithCamera, setCaptureStartsWithCamera] = useState(false)
   const imgRef = useRef<HTMLImageElement>(null)
-  const galleryInputRef = useRef<HTMLInputElement>(null)
+  const captureRef = useRef<VisualSearchCaptureHandle>(null)
   const abortControllerRef = useRef<AbortController | null>(null)
 
   useEffect(() => {
@@ -76,34 +77,23 @@ export default function VisualSearchInterface() {
     setImage(selectedFile)
   }
 
-  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const selectedFile = e.target.files?.[0]
-    e.currentTarget.value = ""
-
-    if (selectedFile) {
-      handleSelectedImage(selectedFile)
-    }
-  }
-
   const triggerCameraInput = () => {
-    setCaptureStartsWithCamera(true)
-    setIsCaptureOpen(true)
+    captureRef.current?.openCamera()
   }
 
   const triggerGalleryInput = () => {
-    galleryInputRef.current?.click()
+    captureRef.current?.openGallery()
   }
 
   const captureDialog = (
     <VisualSearchCapture
+      ref={captureRef}
       isOpen={isCaptureOpen}
-      startWithCamera={captureStartsWithCamera}
       onClose={() => setIsCaptureOpen(false)}
       onCapture={(capturedFile) => {
         handleSelectedImage(capturedFile)
         setIsCaptureOpen(false)
       }}
-      onChooseGallery={triggerGalleryInput}
     />
   )
 
@@ -236,13 +226,6 @@ export default function VisualSearchInterface() {
     return (
       <div className="flex flex-col items-center justify-center py-32 px-6">
         {captureDialog}
-        <input
-          type="file"
-          ref={galleryInputRef}
-          onChange={handleFileSelect}
-          accept="image/*"
-          className="hidden"
-        />
         <div className="max-w-md w-full text-center space-y-8">
           <div className="space-y-4">
             <div className="mx-auto w-24 h-24 bg-primary/5 rounded-3xl flex items-center justify-center ring-1 ring-primary/10">
@@ -258,7 +241,7 @@ export default function VisualSearchInterface() {
           </div>
 
           <div className="pt-4">
-            <div className="flex flex-col gap-3 sm:flex-row sm:justify-center">
+            <div className="flex flex-col gap-3 sm:justify-center">
               <button
                 type="button"
                 onClick={triggerCameraInput}
@@ -335,13 +318,6 @@ export default function VisualSearchInterface() {
             </div>
 
             <div className="mt-6">
-              <input
-                type="file"
-                ref={galleryInputRef}
-                onChange={handleFileSelect}
-                accept="image/*"
-                className="hidden"
-              />
               <div className="flex flex-col gap-3 sm:flex-row">
                 <button
                   type="button"

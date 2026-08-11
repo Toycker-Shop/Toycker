@@ -47,7 +47,6 @@ const fallbackSuggestions = [
 const SearchDrawer = ({ isOpen, onClose }: SearchDrawerProps) => {
   const router = useRouter()
   const inputRef = useRef<HTMLInputElement>(null)
-  const galleryInputRef = useRef<HTMLInputElement>(null)
   const [isCaptureOpen, setIsCaptureOpen] = useState(false)
   const countryCode = DEFAULT_COUNTRY_CODE
   const { previewUrl, setImage, clear: clearImageStore } = useImageSearchStore()
@@ -86,15 +85,6 @@ const SearchDrawer = ({ isOpen, onClose }: SearchDrawerProps) => {
     setImage(file)
     router.push("/search/visual")
     onClose()
-  }
-
-  const handleImageUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0]
-    event.currentTarget.value = ""
-
-    if (file) {
-      handleSelectedImage(file)
-    }
   }
 
   const handleClear = () => {
@@ -285,13 +275,6 @@ const SearchDrawer = ({ isOpen, onClose }: SearchDrawerProps) => {
                         <CameraIcon className="h-5 w-5" />
                       </button>
 
-                      <input
-                        ref={galleryInputRef}
-                        type="file"
-                        accept="image/*"
-                        className="hidden"
-                        onChange={handleImageUpload}
-                      />
                     </div>
                   </div>
                 </form>
@@ -532,7 +515,6 @@ const SearchDrawer = ({ isOpen, onClose }: SearchDrawerProps) => {
                 isOpen={isCaptureOpen && isOpen}
                 onClose={() => setIsCaptureOpen(false)}
                 onCapture={handleSelectedImage}
-                onChooseGallery={() => galleryInputRef.current?.click()}
               />
             </Dialog.Panel>
           </Transition.Child>
