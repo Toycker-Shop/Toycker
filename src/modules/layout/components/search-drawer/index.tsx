@@ -20,10 +20,15 @@ import { useVoiceSearch } from "@modules/layout/hooks/useVoiceSearch"
 import LocalizedClientLink from "@modules/common/components/localized-client-link"
 import { DEFAULT_COUNTRY_CODE } from "@lib/constants/region"
 import { MIN_SEARCH_QUERY_LENGTH } from "@/lib/constants/search"
-import type { SearchProductSummary, SearchCategorySummary, SearchCollectionSummary } from "@lib/data/search"
+import type {
+  SearchProductSummary,
+  SearchCategorySummary,
+  SearchCollectionSummary,
+} from "@lib/data/search"
 import { fixUrl } from "@lib/util/images"
 import { useImageSearchStore } from "@/lib/store/image-search-store"
 import { trackSearchEvent } from "@/lib/analytics/client-events"
+import VisualSearchCapture from "@modules/search/components/visual-search-capture"
 
 type SearchDrawerProps = {
   isOpen: boolean
@@ -42,7 +47,7 @@ const fallbackSuggestions = [
 const SearchDrawer = ({ isOpen, onClose }: SearchDrawerProps) => {
   const router = useRouter()
   const inputRef = useRef<HTMLInputElement>(null)
-  const fileInputRef = useRef<HTMLInputElement>(null)
+  const [isCaptureOpen, setIsCaptureOpen] = useState(false)
   const countryCode = DEFAULT_COUNTRY_CODE
   const { previewUrl, setImage, clear: clearImageStore } = useImageSearchStore()
 
@@ -67,20 +72,23 @@ const SearchDrawer = ({ isOpen, onClose }: SearchDrawerProps) => {
     taxonomyLimit: 5,
   })
 
-  const { isListening, startListening, stopListening, supported: voiceSupported } = useVoiceSearch((text) => {
+  const {
+    isListening,
+    startListening,
+    stopListening,
+    supported: voiceSupported,
+  } = useVoiceSearch((text) => {
     setQuery(text)
   })
 
-  const handleImageUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0]
-    if (file) {
-      setImage(file)
-      router.push("/search/visual")
-      onClose()
-    }
+  const handleSelectedImage = (file: File) => {
+    setImage(file)
+    router.push("/search/visual")
+    onClose()
   }
 
   const handleClear = () => {
+    setIsCaptureOpen(false)
     clear()
     clearImageStore()
     stopListening()
@@ -117,7 +125,9 @@ const SearchDrawer = ({ isOpen, onClose }: SearchDrawerProps) => {
     }
 
     trackSearchEvent(normalizedQuery)
-    router.push(buildLocalizedPath(`/store?q=${encodeURIComponent(normalizedQuery)}`))
+    router.push(
+      buildLocalizedPath(`/store?q=${encodeURIComponent(normalizedQuery)}`)
+    )
     handleClose()
   }
 
@@ -168,7 +178,8 @@ const SearchDrawer = ({ isOpen, onClose }: SearchDrawerProps) => {
                       Search the catalog
                     </Dialog.Title>
                     <p className="text-sm text-slate-500 mt-1">
-                      Find products, categories, and curated collections instantly.
+                      Find products, categories, and curated collections
+                      instantly.
                     </p>
                   </div>
                   <button
@@ -184,7 +195,13 @@ const SearchDrawer = ({ isOpen, onClose }: SearchDrawerProps) => {
 
               <div className="border-b border-slate-100 px-6 pb-2 pt-3 space-y-3">
                 <form onSubmit={handleSubmit} className="space-y-4">
-                  <div className={`group flex items-center rounded-2xl border-2 transition-all duration-300 ${isListening ? 'border-red-500 bg-red-50/10 shadow-[0_0_20px_rgba(239,68,68,0.15)]' : 'border-gray-200 bg-white focus-within:border-primary focus-within:ring-4 focus-within:ring-primary/10'}`}>
+                  <div
+                    className={`group flex items-center rounded-2xl border-2 transition-all duration-300 ${
+                      isListening
+                        ? "border-red-500 bg-red-50/10 shadow-[0_0_20px_rgba(239,68,68,0.15)]"
+                        : "border-gray-200 bg-white focus-within:border-primary focus-within:ring-4 focus-within:ring-primary/10"
+                    }`}
+                  >
                     {previewUrl ? (
                       <div className="relative ml-2 h-10 w-10 overflow-hidden rounded-xl border border-slate-200 shadow-sm shrink-0 group-focus-within:border-primary/30">
                         <Image
@@ -195,7 +212,13 @@ const SearchDrawer = ({ isOpen, onClose }: SearchDrawerProps) => {
                         />
                       </div>
                     ) : (
-                      <MagnifyingGlassIcon className={`ml-3 sm:ml-4 h-6 w-6 shrink-0 transition-colors ${isListening ? 'text-red-500 animate-pulse' : 'text-slate-400 group-focus-within:text-primary'}`} />
+                      <MagnifyingGlassIcon
+                        className={`ml-3 sm:ml-4 h-6 w-6 shrink-0 transition-colors ${
+                          isListening
+                            ? "text-red-500 animate-pulse"
+                            : "text-slate-400 group-focus-within:text-primary"
+                        }`}
+                      />
                     )}
 
                     <input
@@ -205,7 +228,9 @@ const SearchDrawer = ({ isOpen, onClose }: SearchDrawerProps) => {
                       onChange={(event) => setQuery(event.target.value)}
                       placeholder={previewUrl ? "Refine..." : "Search..."}
                       readOnly={isListening}
-                      className={`flex-1 min-w-0 border-0 bg-transparent py-3 sm:py-4 pl-3 text-base sm:text-lg text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-0 ${isListening ? 'text-red-500 font-medium' : ''}`}
+                      className={`flex-1 min-w-0 border-0 bg-transparent py-3 sm:py-4 pl-3 text-base sm:text-lg text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-0 ${
+                        isListening ? "text-red-500 font-medium" : ""
+                      }`}
                       aria-label="Search catalog"
                     />
 
@@ -225,7 +250,11 @@ const SearchDrawer = ({ isOpen, onClose }: SearchDrawerProps) => {
                         <button
                           type="button"
                           onClick={startListening}
-                          className={`rounded-full p-2 sm:p-2.5 transition-all duration-300 ${isListening ? 'bg-red-500 text-white shadow-lg scale-110' : 'text-slate-400 hover:bg-slate-50 hover:text-primary'}`}
+                          className={`rounded-full p-2 sm:p-2.5 transition-all duration-300 ${
+                            isListening
+                              ? "bg-red-500 text-white shadow-lg scale-110"
+                              : "text-slate-400 hover:bg-slate-50 hover:text-primary"
+                          }`}
                           title="Search by voice"
                         >
                           <MicrophoneIcon className="h-5 w-5" />
@@ -234,41 +263,43 @@ const SearchDrawer = ({ isOpen, onClose }: SearchDrawerProps) => {
 
                       <button
                         type="button"
-                        onClick={() => fileInputRef.current?.click()}
-                        className={`rounded-full p-2 sm:p-2.5 transition-all duration-300 ${previewUrl ? 'bg-primary text-white shadow-lg transform rotate-6' : 'text-slate-400 hover:bg-slate-50 hover:text-primary'}`}
+                        onClick={() => setIsCaptureOpen(true)}
+                        className={`rounded-full p-2 sm:p-2.5 transition-all duration-300 ${
+                          previewUrl
+                            ? "bg-primary text-white shadow-lg transform rotate-6"
+                            : "text-slate-400 hover:bg-slate-50 hover:text-primary"
+                        }`}
                         title="Search by image"
+                        aria-label="Search by image"
                       >
-                        {previewUrl ? <PhotoIcon className="h-5 w-5" /> : <CameraIcon className="h-5 w-5" />}
+                        <CameraIcon className="h-5 w-5" />
                       </button>
 
-                      <input
-                        ref={fileInputRef}
-                        type="file"
-                        accept="image/*"
-                        className="hidden"
-                        onChange={handleImageUpload}
-                      />
                     </div>
                   </div>
                 </form>
 
-                {(suggestions.length > 0 || fallbackSuggestions.length > 0) && !previewUrl && (
-                  <div className="animate-in fade-in slide-in-from-top-2 duration-500">
-                    <div className="flex gap-2 pt-2 overflow-x-auto pb-2 scrollbar-hide -mx-6 px-6 sm:mx-0 sm:px-0 sm:flex-wrap">
-                      {(suggestions.length ? suggestions : fallbackSuggestions).map((suggestion: string) => (
-                        <button
-                          key={suggestion}
-                          type="button"
-                          onClick={() => setQuery(suggestion)}
-                          className="group flex flex-shrink-0 items-center gap-1.5 rounded-full border border-slate-100 bg-slate-50/50 px-3 py-1.5 text-sm font-medium text-slate-600 transition-all hover:border-primary/20 hover:bg-primary/5 hover:text-primary hover:shadow-sm whitespace-nowrap"
-                        >
-                          <MagnifyingGlassIcon className="h-3.5 w-3.5 text-slate-400 transition-colors group-hover:text-primary/60" />
-                          {suggestion}
-                        </button>
-                      ))}
+                {(suggestions.length > 0 || fallbackSuggestions.length > 0) &&
+                  !previewUrl && (
+                    <div className="animate-in fade-in slide-in-from-top-2 duration-500">
+                      <div className="flex gap-2 pt-2 overflow-x-auto pb-2 scrollbar-hide -mx-6 px-6 sm:mx-0 sm:px-0 sm:flex-wrap">
+                        {(suggestions.length
+                          ? suggestions
+                          : fallbackSuggestions
+                        ).map((suggestion: string) => (
+                          <button
+                            key={suggestion}
+                            type="button"
+                            onClick={() => setQuery(suggestion)}
+                            className="group flex flex-shrink-0 items-center gap-1.5 rounded-full border border-slate-100 bg-slate-50/50 px-3 py-1.5 text-sm font-medium text-slate-600 transition-all hover:border-primary/20 hover:bg-primary/5 hover:text-primary hover:shadow-sm whitespace-nowrap"
+                          >
+                            <MagnifyingGlassIcon className="h-3.5 w-3.5 text-slate-400 transition-colors group-hover:text-primary/60" />
+                            {suggestion}
+                          </button>
+                        ))}
+                      </div>
                     </div>
-                  </div>
-                )}
+                  )}
               </div>
 
               <div className="flex-1 overflow-y-auto bg-slate-50/30 px-6 py-6 scrollbar-thin scrollbar-track-transparent scrollbar-thumb-slate-200">
@@ -281,9 +312,15 @@ const SearchDrawer = ({ isOpen, onClose }: SearchDrawerProps) => {
                       </div>
                     </div>
                     <div>
-                      <h3 className="text-lg font-semibold text-slate-900">Discover Something New</h3>
+                      <h3 className="text-lg font-semibold text-slate-900">
+                        Discover Something New
+                      </h3>
                       <p className="mt-2 text-sm text-slate-500 max-w-[260px] mx-auto leading-relaxed">
-                        Try searching for <span className="text-primary font-medium">&quot;Robot&quot;</span> or upload a photo to find similar toys.
+                        Try searching for{" "}
+                        <span className="text-primary font-medium">
+                          &quot;Robot&quot;
+                        </span>{" "}
+                        or upload a photo to find similar toys.
                       </p>
                     </div>
                   </div>
@@ -298,7 +335,9 @@ const SearchDrawer = ({ isOpen, onClose }: SearchDrawerProps) => {
                           <span className="relative inline-flex rounded-full h-3 w-3 bg-primary"></span>
                         </span>
                         <span className="text-sm font-medium text-slate-600">
-                          {previewUrl ? "Analyzing visual patterns..." : "Searching catalog..."}
+                          {previewUrl
+                            ? "Analyzing visual patterns..."
+                            : "Searching catalog..."}
                         </span>
                       </div>
                     </div>
@@ -343,87 +382,101 @@ const SearchDrawer = ({ isOpen, onClose }: SearchDrawerProps) => {
                         count={results.products.length}
                       >
                         <div className="flex flex-col gap-3">
-                          {results.products.map((product: SearchProductSummary) => (
-                            <LocalizedClientLink
-                              key={product.id}
-                              href={`/products/${product.handle}`}
-                              className="group relative flex items-center gap-4 rounded-2xl border border-slate-100 bg-white p-3 transition-all duration-300 hover:border-primary/20 hover:bg-slate-50/50"
-                              prefetch={false}
-                              onClick={handleClose}
-                            >
-                              {/* Image Container */}
-                              <div className="relative h-20 w-20 shrink-0 overflow-hidden rounded-xl bg-slate-100 border border-slate-100">
-                                {product.thumbnail ? (
-                                  <Image
-                                    src={fixUrl(product.thumbnail)!}
-                                    alt={product.title}
-                                    fill
-                                    sizes="80px"
-                                    className="object-cover transition-transform duration-500 group-hover:scale-110"
-                                  />
-                                ) : (
-                                  <div className="flex h-full w-full items-center justify-center text-slate-300">
-                                    <PhotoIcon className="h-8 w-8" />
-                                  </div>
-                                )}
-                              </div>
-
-                              {/* Content */}
-                              <div className="flex flex-1 flex-col justify-center min-w-0 py-1">
-                                <h4 className="truncate text-base font-semibold text-slate-900 group-hover:text-primary transition-colors">
-                                  {product.title}
-                                </h4>
-                                <div className="mt-1 flex items-center gap-2">
-                                  {product.price && (
-                                    <p className="text-sm font-bold text-primary">
-                                      {product.price.formatted}
-                                    </p>
+                          {results.products.map(
+                            (product: SearchProductSummary) => (
+                              <LocalizedClientLink
+                                key={product.id}
+                                href={`/products/${product.handle}`}
+                                className="group relative flex items-center gap-4 rounded-2xl border border-slate-100 bg-white p-3 transition-all duration-300 hover:border-primary/20 hover:bg-slate-50/50"
+                                prefetch={false}
+                                onClick={handleClose}
+                              >
+                                {/* Image Container */}
+                                <div className="relative h-20 w-20 shrink-0 overflow-hidden rounded-xl bg-slate-100 border border-slate-100">
+                                  {product.thumbnail ? (
+                                    <Image
+                                      src={fixUrl(product.thumbnail)!}
+                                      alt={product.title}
+                                      fill
+                                      sizes="80px"
+                                      className="object-cover transition-transform duration-500 group-hover:scale-110"
+                                    />
+                                  ) : (
+                                    <div className="flex h-full w-full items-center justify-center text-slate-300">
+                                      <PhotoIcon className="h-8 w-8" />
+                                    </div>
                                   )}
                                 </div>
-                              </div>
 
-                              {/* Action Arrow */}
-                              <div className="pr-2 text-slate-300 transition-all duration-300 group-hover:translate-x-1 group-hover:text-primary">
-                                <ArrowUpRightIcon className="h-5 w-5" />
-                              </div>
-                            </LocalizedClientLink>
-                          ))}
+                                {/* Content */}
+                                <div className="flex flex-1 flex-col justify-center min-w-0 py-1">
+                                  <h4 className="truncate text-base font-semibold text-slate-900 group-hover:text-primary transition-colors">
+                                    {product.title}
+                                  </h4>
+                                  <div className="mt-1 flex items-center gap-2">
+                                    {product.price && (
+                                      <p className="text-sm font-bold text-primary">
+                                        {product.price.formatted}
+                                      </p>
+                                    )}
+                                  </div>
+                                </div>
+
+                                {/* Action Arrow */}
+                                <div className="pr-2 text-slate-300 transition-all duration-300 group-hover:translate-x-1 group-hover:text-primary">
+                                  <ArrowUpRightIcon className="h-5 w-5" />
+                                </div>
+                              </LocalizedClientLink>
+                            )
+                          )}
                         </div>
                       </ResultSection>
                     )}
 
                     {!previewUrl && results.categories.length > 0 && (
-                      <ResultSection title="Categories" count={results.categories.length}>
+                      <ResultSection
+                        title="Categories"
+                        count={results.categories.length}
+                      >
                         <div className="flex flex-wrap gap-2">
-                          {results.categories.map((category: SearchCategorySummary) => (
-                            <LocalizedClientLink
-                              key={category.id}
-                              href={`/categories/${category.handle}`}
-                              className="flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 transition hover:border-primary/50 hover:text-primary hover:shadow-sm"
-                              onClick={handleClose}
-                            >
-                              <span>{category.name}</span>
-                              <ArrowUpRightIcon className="h-4 w-4" />
-                            </LocalizedClientLink>
-                          ))}
+                          {results.categories.map(
+                            (category: SearchCategorySummary) => (
+                              <LocalizedClientLink
+                                key={category.id}
+                                href={`/categories/${category.handle}`}
+                                className="flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 transition hover:border-primary/50 hover:text-primary hover:shadow-sm"
+                                onClick={handleClose}
+                              >
+                                <span>{category.name}</span>
+                                <ArrowUpRightIcon className="h-4 w-4" />
+                              </LocalizedClientLink>
+                            )
+                          )}
                         </div>
                       </ResultSection>
                     )}
 
                     {!previewUrl && results.collections.length > 0 && (
-                      <ResultSection title="Collections" count={results.collections.length}>
+                      <ResultSection
+                        title="Collections"
+                        count={results.collections.length}
+                      >
                         <div className="flex flex-wrap gap-2">
-                          {results.collections.map((collection: SearchCollectionSummary) => (
-                            <LocalizedClientLink
-                              key={collection.id}
-                              href={`/collections/${encodeURIComponent(collection.handle)}`}
-                              className="flex items-center gap-2 rounded-2xl border border-slate-200 bg-gradient-to-r from-slate-50 to-white px-4 py-2 text-sm font-medium text-slate-700 transition hover:border-primary/50 hover:text-primary hover:shadow-sm"
-                              onClick={handleClose}
-                            >
-                              <span>{collection.title}</span>
-                              <ArrowUpRightIcon className="h-4 w-4" />
-                            </LocalizedClientLink>
-                          ))}
+                          {results.collections.map(
+                            (collection: SearchCollectionSummary) => (
+                              <LocalizedClientLink
+                                key={collection.id}
+                                href={`/collections/${encodeURIComponent(
+                                  collection.handle
+                                )}`}
+                                className="flex items-center gap-2 rounded-2xl border border-slate-200 bg-gradient-to-r from-slate-50 to-white px-4 py-2 text-sm font-medium text-slate-700 transition hover:border-primary/50 hover:text-primary hover:shadow-sm"
+                                onClick={handleClose}
+                              >
+                                <span>{collection.title}</span>
+                                <ArrowUpRightIcon className="h-4 w-4" />
+                              </LocalizedClientLink>
+                            )
+                          )}
                         </div>
                       </ResultSection>
                     )}
@@ -436,11 +489,16 @@ const SearchDrawer = ({ isOpen, onClose }: SearchDrawerProps) => {
               {!previewUrl && (
                 <div className="border-t border-slate-200 bg-white px-6 py-4">
                   <LocalizedClientLink
-                    href={canViewAll ? `/store?q=${encodeURIComponent(query.trim())}` : "#"}
-                    className={`flex h-12 items-center justify-center rounded-full text-sm font-semibold transition ${canViewAll
-                      ? "bg-primary text-white hover:bg-primary/90 active:scale-95 transition-all"
-                      : "bg-slate-100 text-slate-400 cursor-not-allowed pointer-events-none"
-                      }`}
+                    href={
+                      canViewAll
+                        ? `/store?q=${encodeURIComponent(query.trim())}`
+                        : "#"
+                    }
+                    className={`flex h-12 items-center justify-center rounded-full text-sm font-semibold transition ${
+                      canViewAll
+                        ? "bg-primary text-white hover:bg-primary/90 active:scale-95 transition-all"
+                        : "bg-slate-100 text-slate-400 cursor-not-allowed pointer-events-none"
+                    }`}
                     aria-disabled={!canViewAll}
                     onClick={() => {
                       if (!canViewAll) {
@@ -453,6 +511,11 @@ const SearchDrawer = ({ isOpen, onClose }: SearchDrawerProps) => {
                   </LocalizedClientLink>
                 </div>
               )}
+              <VisualSearchCapture
+                isOpen={isCaptureOpen && isOpen}
+                onClose={() => setIsCaptureOpen(false)}
+                onCapture={handleSelectedImage}
+              />
             </Dialog.Panel>
           </Transition.Child>
         </div>
@@ -482,4 +545,3 @@ const ResultSection = ({
 )
 
 export default SearchDrawer
-
