@@ -1,4 +1,8 @@
-import { getAdminOrders, type AdminOrderListItem } from "@/lib/data/admin"
+import {
+  getAdminOrders,
+  type AdminOrderListItem,
+  type AdminOrderTab,
+} from "@/lib/data/admin"
 import { convertToLocale } from "@lib/util/money"
 import AdminBadge from "@modules/admin/components/admin-badge"
 import AdminPageHeader from "@modules/admin/components/admin-page-header"
@@ -11,6 +15,7 @@ import { ClickableTableRow } from "@modules/admin/components/clickable-table-row
 import RealtimeOrdersListener from "@modules/admin/components/realtime-orders-listener"
 import { AdminTableWrapper } from "@modules/admin/components/admin-table-wrapper"
 import { expireStaleEasebuzzPendingPayments } from "@/lib/actions/cancel-pending-payment"
+import { cn } from "@lib/util/cn"
 import {
   getPaymentMethodDisplay,
   getPaymentStatusDisplay,
@@ -111,25 +116,53 @@ function getAcceptanceBadge(status: AdminOrderListItem["status"]) {
   }
 }
 
+const ORDER_TABS: Array<{ value: AdminOrderTab; label: string }> = [
+  { value: "all", label: "All" },
+  { value: "confirmed", label: "Confirmed" },
+  { value: "pending", label: "Pending" },
+  { value: "cancelled", label: "Cancelled" },
+]
+
+function parseOrderTab(value?: string): AdminOrderTab {
+  if (
+    value === "confirmed" ||
+    value === "pending" ||
+    value === "cancelled"
+  ) {
+    return value
+  }
+
+  return "all"
+}
+
 export default async function AdminOrders({
   searchParams
 }: {
-  searchParams: Promise<{ page?: string; search?: string }>
+  searchParams: Promise<{ page?: string; search?: string; tab?: string }>
 }) {
-  const { page = "1", search = "" } = await searchParams
+  const { page = "1", search = "", tab: tabParam } = await searchParams
   const pageNumber = parseInt(page, 10) || 1
+  const activeTab = parseOrderTab(tabParam)
 
   await expireStaleEasebuzzPendingPayments()
 
-  const { orders, count, totalPages, currentPage } = await getAdminOrders({
+  const { orders, count, totalPages, currentPage, counts } = await getAdminOrders({
     page: pageNumber,
     limit: 20,
-    search: search || undefined
+    search: search || undefined,
+    tab: activeTab,
   })
 
   const hasSearch = search && search.trim().length > 0
-  const buildUrl = (newPage?: number, clearSearch = false) => {
+  const buildUrl = (
+    newTab: AdminOrderTab = activeTab,
+    newPage?: number,
+    clearSearch = false
+  ) => {
     const params = new URLSearchParams()
+    if (newTab !== "all") {
+      params.set("tab", newTab)
+    }
     if (newPage && newPage > 1) {
       params.set("page", newPage.toString())
     }
@@ -139,7 +172,7 @@ export default async function AdminOrders({
     const queryString = params.toString()
     return queryString ? `/admin/orders?${queryString}` : "/admin/orders"
   }
-  const currentBackUrl = buildUrl(currentPage)
+  const currentBackUrl = buildUrl(activeTab, currentPage)
   const encodedBackUrl = encodeURIComponent(currentBackUrl)
 
   return (
@@ -157,6 +190,29 @@ export default async function AdminOrders({
 
       <div className="p-0 border-none shadow-none bg-transparent">
         <AdminTableWrapper className="bg-white rounded-xl border border-admin-border shadow-sm">
+          <nav
+            aria-label="Order filters"
+            className="border-b border-gray-200 px-4"
+          >
+            <div className="flex space-x-6 overflow-x-auto">
+              {ORDER_TABS.map((tab) => (
+                <Link
+                  key={tab.value}
+                  href={buildUrl(tab.value)}
+                  aria-current={activeTab === tab.value ? "page" : undefined}
+                  className={cn(
+                    "whitespace-nowrap py-3 text-sm font-medium border-b-2 transition-colors",
+                    activeTab === tab.value
+                      ? "border-indigo-600 text-indigo-600"
+                      : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
+                  )}
+                >
+                  {tab.label} ({counts[tab.value]})
+                </Link>
+              ))}
+            </div>
+          </nav>
+
           <table className="min-w-full divide-y divide-gray-200">
             <thead className="bg-[#f7f8f9]">
               <tr>
@@ -241,7 +297,10 @@ export default async function AdminOrders({
                       {hasSearch ? (
                         <p className="text-xs text-gray-400 mt-1">
                           Try adjusting your search or{" "}
-                          <Link href={buildUrl()} className="text-indigo-600 hover:underline">
+                          <Link
+                            href={buildUrl(activeTab, undefined, true)}
+                            className="text-indigo-600 hover:underline"
+                          >
                             clear the search
                           </Link>
                         </p>
