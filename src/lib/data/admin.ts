@@ -2141,6 +2141,7 @@ interface GetAdminOrdersParams {
   page?: number
   limit?: number
   search?: string
+  tab?: AdminOrderTab
 }
 
 interface PaginatedOrdersResponse {
@@ -2148,6 +2149,49 @@ interface PaginatedOrdersResponse {
   count: number
   totalPages: number
   currentPage: number
+  counts: AdminOrderCounts
+}
+
+export type AdminOrderTab = "all" | "confirmed" | "pending" | "cancelled"
+
+export type AdminOrderCounts = Record<AdminOrderTab, number>
+
+const ADMIN_ORDER_TAB_VALUES: AdminOrderTab[] = [
+  "all",
+  "confirmed",
+  "pending",
+  "cancelled",
+]
+
+type AdminOrderTabFilter = {
+  statusValues?: string[]
+  orExpression?: string
+  excludedStatusValues?: string
+  excludedPaymentValues?: string
+}
+
+function getAdminOrderTabFilter(tab: AdminOrderTab): AdminOrderTabFilter {
+  switch (tab) {
+    case "confirmed":
+      return {
+        statusValues: ["order_placed", "accepted", "shipped", "delivered"],
+        excludedPaymentValues: '("failed","cancelled")',
+      }
+    case "pending":
+      return {
+        orExpression:
+          "status.eq.pending,payment_status.in.(pending,awaiting,unpaid)",
+        excludedStatusValues: '("cancelled","failed")',
+        excludedPaymentValues: '("failed","cancelled")',
+      }
+    case "cancelled":
+      return {
+        orExpression:
+          "status.in.(cancelled,failed),payment_status.in.(failed,cancelled)",
+      }
+    case "all":
+      return {}
+  }
 }
 
 type RepeatCustomerLookupRow = Pick<
@@ -2322,66 +2366,84 @@ export async function getAdminOrders(
 ): Promise<PaginatedOrdersResponse> {
   await ensureAdmin()
 
-  const { page = 1, limit = 20, search } = params
+  const { page = 1, limit = 20, search, tab = "all" } = params
   const supabase = await createClient()
+  const searchTerm = search?.trim() || ""
+  const searchNum = searchTerm ? parseInt(searchTerm, 10) : NaN
 
-  // Check if search is a number (order ID search)
-  const searchNum = search && search.trim() ? parseInt(search, 10) : NaN
-
-  if (!isNaN(searchNum)) {
-    const { data, error } = await supabase
-      .from("orders")
-      .select(ADMIN_ORDER_LIST_SELECT)
-      .eq("display_id", searchNum)
-      .order("created_at", { ascending: false })
-      .range((page - 1) * limit, page * limit - 1)
-
-    if (error) throw error
-
-    const count = data?.length || 0
-    const totalPages = Math.ceil(count / limit) || 1
-
-    return {
-      orders: await attachOrderCustomerFlags(
-        supabase,
-        (data || []) as AdminOrderListRow[]
-      ),
-      count,
-      totalPages,
-      currentPage: page,
-    }
+  const counts: AdminOrderCounts = {
+    all: 0,
+    confirmed: 0,
+    pending: 0,
+    cancelled: 0,
   }
 
-  // Regular search (by email) or no search
-  // Calculate total count first
-  let countQuery = supabase
-    .from("orders")
-    .select("*", { count: "exact", head: true })
+  const countResults = await Promise.all(
+    ADMIN_ORDER_TAB_VALUES.map(async (countTab) => {
+      const filter = getAdminOrderTabFilter(countTab)
+      let countQuery = supabase
+        .from("orders")
+        .select("*", { count: "exact", head: true })
 
-  if (search && search.trim()) {
-    // Search by customer_email
-    countQuery = countQuery.ilike("customer_email", `%${search}%`)
-  }
+      if (filter.statusValues) {
+        countQuery = countQuery.in("status", filter.statusValues)
+      }
+      if (filter.orExpression) {
+        countQuery = countQuery.or(filter.orExpression)
+      }
+      if (filter.excludedStatusValues) {
+        countQuery = countQuery.not("status", "in", filter.excludedStatusValues)
+      }
+      if (filter.excludedPaymentValues) {
+        countQuery = countQuery.not("payment_status", "in", filter.excludedPaymentValues)
+      }
 
-  const { count } = await countQuery
+      if (!isNaN(searchNum)) {
+        countQuery = countQuery.eq("display_id", searchNum)
+      } else if (searchTerm) {
+        countQuery = countQuery.ilike("customer_email", "%" + searchTerm + "%")
+      }
 
-  // Calculate pagination
-  const offset = (page - 1) * limit
-  const from = offset
-  const to = offset + limit - 1
-  const totalPages = count ? Math.ceil(count / limit) : 1
+      const { count, error } = await countQuery
+      if (error) throw error
+      return { tab: countTab, count: count || 0 }
+    })
+  )
 
-  // Fetch paginated data
+  countResults.forEach((result) => {
+    counts[result.tab] = result.count
+  })
+
+  const activeFilter = getAdminOrderTabFilter(tab)
+  const count = counts[tab]
+
   let query = supabase
     .from("orders")
     .select(ADMIN_ORDER_LIST_SELECT)
     .order("created_at", { ascending: false })
-    .range(from, to)
 
-  if (search && search.trim()) {
-    // Search by customer_email
-    query = query.ilike("customer_email", `%${search}%`)
+  if (activeFilter.statusValues) {
+    query = query.in("status", activeFilter.statusValues)
   }
+  if (activeFilter.orExpression) {
+    query = query.or(activeFilter.orExpression)
+  }
+  if (activeFilter.excludedStatusValues) {
+    query = query.not("status", "in", activeFilter.excludedStatusValues)
+  }
+  if (activeFilter.excludedPaymentValues) {
+    query = query.not("payment_status", "in", activeFilter.excludedPaymentValues)
+  }
+
+  if (!isNaN(searchNum)) {
+    query = query.eq("display_id", searchNum)
+  } else if (searchTerm) {
+    query = query.ilike("customer_email", "%" + searchTerm + "%")
+  }
+
+  const offset = (page - 1) * limit
+  const totalPages = count ? Math.ceil(count / limit) : 1
+  query = query.range(offset, offset + limit - 1)
 
   const { data, error } = await query
   if (error) throw error
@@ -2394,6 +2456,7 @@ export async function getAdminOrders(
     count: count || 0,
     totalPages,
     currentPage: page,
+    counts,
   }
 }
 
