@@ -1,6 +1,7 @@
 "use client"
 
 import { useReducer, useCallback, useMemo } from "react"
+import { isValidIndianPincode } from "@lib/util/indian-pincode"
 
 // Types for addresses matching your Supabase schema
 export interface Address {
@@ -57,7 +58,7 @@ export function isAddressValid(address: Address | null): boolean {
     address.last_name &&
     address.address_1 &&
     address.city &&
-    address.postal_code &&
+    isValidIndianPincode(address.postal_code) &&
     address.country_code
   )
 }

@@ -6,6 +6,7 @@ import { revalidateTag, revalidatePath } from "next/cache"
 import { getAuthUser } from "./auth"
 import { redirect } from "next/navigation"
 import { removeCartId } from "./cookies"
+import { INDIAN_PINCODE_ERROR, isValidIndianPincode } from "@/lib/util/indian-pincode"
 import { CustomerProfile, Address } from "@/lib/supabase/types"
 import { getCustomerFacingEmail } from "@/lib/util/customer-email"
 import { getCheckoutPhoneValue } from "@/lib/util/customer-phone"
@@ -192,6 +193,14 @@ export async function addCustomerAddress(
   }
 
   // Trimming inputs
+  const postalCode = formData.get("postal_code")
+  if (
+    typeof postalCode !== "string" ||
+    !isValidIndianPincode(postalCode)
+  ) {
+    return { success: false, error: INDIAN_PINCODE_ERROR }
+  }
+
   const first_name = ((formData.get("first_name") as string) || "").trim()
   const last_name = ((formData.get("last_name") as string) || "").trim()
 
@@ -207,7 +216,7 @@ export async function addCustomerAddress(
       .trim()
       .toLowerCase(),
     province: ((formData.get("province") as string) || "").trim(),
-    postal_code: ((formData.get("postal_code") as string) || "").trim(),
+    postal_code: postalCode,
     phone: ((formData.get("phone") as string) || "").trim(),
     is_default_billing: formData.get("isDefaultBilling") === "true",
     is_default_shipping: formData.get("isDefaultShipping") === "true",
@@ -259,6 +268,14 @@ export async function updateCustomerAddress(
     return { success: false, error: "Not authenticated" }
   }
 
+  const postalCode = formData.get("postal_code")
+  if (
+    typeof postalCode !== "string" ||
+    !isValidIndianPincode(postalCode)
+  ) {
+    return { success: false, error: INDIAN_PINCODE_ERROR }
+  }
+
   const { data: existingAddress, error: existingAddressError } = await supabase
     .from("addresses")
     .select("is_default_billing, is_default_shipping")
@@ -292,7 +309,7 @@ export async function updateCustomerAddress(
       .trim()
       .toLowerCase(),
     province: ((formData.get("province") as string) || "").trim(),
-    postal_code: ((formData.get("postal_code") as string) || "").trim(),
+    postal_code: postalCode,
     phone: ((formData.get("phone") as string) || "").trim(),
     is_default_billing: nextIsDefaultBilling,
     is_default_shipping: nextIsDefaultShipping,

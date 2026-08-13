@@ -8,6 +8,7 @@ import { createClient } from "@/lib/supabase/server"
 import { createAdminClient } from "@/lib/supabase/admin"
 import { Order, PaymentCollection } from "@/lib/supabase/types"
 import { resolveCustomerPhone } from "@/lib/util/customer-contact-phone"
+import { INDIAN_PINCODE_ERROR, INDIAN_PINCODE_PATTERN } from "@/lib/util/indian-pincode"
 import { getCheckoutPhoneValue } from "@/lib/util/customer-phone"
 import { sendMetaPurchaseEvent } from "@/lib/integrations/meta-capi"
 
@@ -19,7 +20,7 @@ const AddressSchema = z.object({
   address_2: z.string().optional().nullable(),
   city: z.string().min(1, "City is required"),
   province: z.string().optional().nullable(),
-  postal_code: z.string().min(1, "Postal code is required"),
+  postal_code: z.string().regex(INDIAN_PINCODE_PATTERN, INDIAN_PINCODE_ERROR),
   country_code: z.string().min(2, "Country is required"),
   phone: z.string().optional().nullable(),
 })

@@ -20,6 +20,7 @@ import { generateEasebuzzHash, EasebuzzHashParams } from "@/lib/easebuzz"
 import { getBaseURL } from "@/lib/util/env"
 import { getAuthUser } from "./auth"
 import { getCustomerFacingEmail } from "@/lib/util/customer-email"
+import { INDIAN_PINCODE_ERROR, isValidIndianPincode } from "@/lib/util/indian-pincode"
 import {
   getAppliedClubSavings,
   getOrderPricingMetadata,
@@ -1143,6 +1144,22 @@ export async function saveAddressesBackground(
     return { message: "Phone number is required", success: false }
   }
 
+  const shippingPostalCode = formData.get("shipping_address.postal_code")
+  const billingPostalCode = formData.get("billing_address.postal_code")
+  const resolvedBillingPostalCode =
+    typeof billingPostalCode === "string" && billingPostalCode !== ""
+      ? billingPostalCode
+      : shippingPostalCode
+
+  if (
+    typeof shippingPostalCode !== "string" ||
+    typeof resolvedBillingPostalCode !== "string" ||
+    !isValidIndianPincode(shippingPostalCode) ||
+    !isValidIndianPincode(resolvedBillingPostalCode)
+  ) {
+    return { message: INDIAN_PINCODE_ERROR, success: false }
+  }
+
   const data = {
     email: formData.get("email") as string,
     shipping_address: {
@@ -1150,7 +1167,7 @@ export async function saveAddressesBackground(
       last_name: formData.get("shipping_address.last_name"),
       address_1: formData.get("shipping_address.address_1"),
       company: formData.get("shipping_address.company"),
-      postal_code: formData.get("shipping_address.postal_code"),
+      postal_code: shippingPostalCode,
       city: formData.get("shipping_address.city"),
       country_code: formData.get("shipping_address.country_code"),
       province: formData.get("shipping_address.province"),
@@ -1169,9 +1186,7 @@ export async function saveAddressesBackground(
       company:
         formData.get("billing_address.company") ||
         formData.get("shipping_address.company"),
-      postal_code:
-        formData.get("billing_address.postal_code") ||
-        formData.get("shipping_address.postal_code"),
+      postal_code: resolvedBillingPostalCode,
       city:
         formData.get("billing_address.city") ||
         formData.get("shipping_address.city"),
@@ -1356,6 +1371,9 @@ async function upsertUserAddressWithDefaults({
   userId: string
   address: SavedAddressInput
 } & AddressDefaults) {
+  if (!isValidIndianPincode(address.postal_code)) {
+    throw new Error(INDIAN_PINCODE_ERROR)
+  }
   const normalizedAddress = normalizeSavedAddressInput(address)
   const existingAddress = await findExistingUserAddress(
     supabase,

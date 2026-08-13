@@ -6,9 +6,11 @@ import { Button } from "@modules/common/components/button"
 import { Text } from "@modules/common/components/text"
 import { cn } from "@lib/util/cn"
 
+import { getValidIndianPincodeOrEmpty } from "@lib/util/indian-pincode"
 import useToggleState from "@lib/hooks/use-toggle-state"
 import CountrySelect from "@modules/checkout/components/country-select"
 import Input from "@modules/common/components/input"
+import IndianPincodeInput from "@modules/common/components/indian-pincode-input"
 import Modal from "@modules/common/components/modal"
 import Spinner from "@modules/common/icons/spinner"
 import { SubmitButton } from "@modules/checkout/components/submit-button"
@@ -173,12 +175,12 @@ const EditAddress: React.FC<EditAddressProps> = ({
                 data-testid="address-2-input"
               />
               <div className="grid grid-cols-[144px_1fr] gap-x-2">
-                <Input
+                <IndianPincodeInput
                   label="Postal code"
                   name="postal_code"
                   required
                   autoComplete="postal-code"
-                  defaultValue={address.postal_code || undefined}
+                  defaultValue={getValidIndianPincodeOrEmpty(address.postal_code)}
                   data-testid="postal-code-input"
                 />
                 <Input

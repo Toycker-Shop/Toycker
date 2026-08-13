@@ -1,11 +1,16 @@
 import Checkbox from "@modules/common/components/checkbox"
 import Input from "@modules/common/components/input"
+import IndianPincodeInput from "@modules/common/components/indian-pincode-input"
 import React, { useCallback, useEffect, useMemo, useState } from "react"
 import { useDebounce } from "@lib/hooks/use-debounce"
 import AddressSelect from "../address-select"
 import CountrySelect from "../country-select"
 import { useCheckout } from "../../context/checkout-context"
 import { getCustomerFacingEmail } from "@/lib/util/customer-email"
+import {
+  getValidIndianPincodeOrEmpty,
+  isValidIndianPincode,
+} from "@lib/util/indian-pincode"
 import { getCheckoutPhoneValue } from "@/lib/util/customer-phone"
 import {
   Address as SavedAddress,
@@ -80,7 +85,9 @@ function buildFormData(
     "billing_address.address_1": initialAddress?.address_1 || "",
     "billing_address.company":
       initialAddress?.company || initialAddress?.address_2 || "",
-    "billing_address.postal_code": initialAddress?.postal_code || "",
+    "billing_address.postal_code": getValidIndianPincodeOrEmpty(
+      initialAddress?.postal_code
+    ),
     "billing_address.city": initialAddress?.city || "",
     "billing_address.country_code": getDefaultCountryCode(cart, initialAddress),
     "billing_address.province": initialAddress?.province || "",
@@ -175,7 +182,9 @@ const BillingAddress = ({
         "billing_address.last_name": address.last_name || "",
         "billing_address.address_1": address.address_1 || "",
         "billing_address.company": address.company || address.address_2 || "",
-        "billing_address.postal_code": address.postal_code || "",
+        "billing_address.postal_code": getValidIndianPincodeOrEmpty(
+          address.postal_code
+        ),
         "billing_address.city": address.city || "",
         "billing_address.country_code":
           address.country_code || getDefaultCountryCode(cart, address),
@@ -188,7 +197,7 @@ const BillingAddress = ({
   )
 
   useEffect(() => {
-    if (!/^[1-9][0-9]{5}$/.test(debouncedPincode)) return
+    if (!isValidIndianPincode(debouncedPincode)) return
 
     let cancelled = false
     setPincodeLoading(true)
@@ -290,10 +299,9 @@ const BillingAddress = ({
           autoComplete="organization"
           data-testid="billing-company-input"
         />
-        <Input
+        <IndianPincodeInput
           label="Pincode"
           name="billing_address.postal_code"
-          autoComplete="postal-code"
           value={formData["billing_address.postal_code"] || ""}
           onChange={handleChange}
           required

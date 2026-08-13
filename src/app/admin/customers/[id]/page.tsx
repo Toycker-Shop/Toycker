@@ -159,7 +159,7 @@ export default async function AdminCustomerDetails({
             {customer.addresses && customer.addresses.length > 0 ? (
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 {/* @ts-ignore */}
-                {customer.addresses.map((addr: any) => (
+                {customer.addresses.map((addr) => (
                   <EditAddressModal
                     key={addr.id}
                     address={addr}

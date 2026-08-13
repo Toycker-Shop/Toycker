@@ -1,6 +1,7 @@
 "use client"
 
 import React, { useEffect, useMemo, useActionState } from "react"
+import IndianPincodeInput from "@modules/common/components/indian-pincode-input"
 
 import Input from "@modules/common/components/input"
 
@@ -8,6 +9,7 @@ import AccountInfo from "../account-info"
 import { CustomerProfile, Region } from "@/lib/supabase/types"
 import { addCustomerAddress, updateCustomerAddress } from "@lib/data/customer"
 import CountrySelect from "@modules/checkout/components/country-select"
+import { getValidIndianPincodeOrEmpty } from "@lib/util/indian-pincode"
 import { getCheckoutPhoneValue } from "@/lib/util/customer-phone"
 
 type MyInformationProps = {
@@ -148,10 +150,10 @@ const ProfileBillingAddress: React.FC<MyInformationProps> = ({
             data-testid="billing-address-2-input"
           />
           <div className="grid grid-cols-[144px_1fr] gap-x-2">
-            <Input
+            <IndianPincodeInput
               label="Postal code"
               name="postal_code"
-              defaultValue={billingAddress?.postal_code || undefined}
+              defaultValue={getValidIndianPincodeOrEmpty(billingAddress?.postal_code)}
               required
               data-testid="billing-postcal-code-input"
             />

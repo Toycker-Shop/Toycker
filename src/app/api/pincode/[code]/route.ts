@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server"
 
+import { isValidIndianPincode } from "@/lib/util/indian-pincode"
 interface PostOffice {
   Name: string
   District: string
@@ -27,7 +28,7 @@ export async function GET(
   const { code } = await params
 
   // Validate: exactly 6 digits, first digit 1-9
-  if (!/^[1-9][0-9]{5}$/.test(code)) {
+  if (!isValidIndianPincode(code)) {
     return NextResponse.json(
       { error: "Invalid pincode format" },
       { status: 400 }

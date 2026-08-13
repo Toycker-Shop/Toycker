@@ -8,7 +8,9 @@ import { Address, Region } from "@/lib/supabase/types"
 import CountrySelect from "@modules/checkout/components/country-select"
 import { SubmitButton } from "@modules/checkout/components/submit-button"
 import Input from "@modules/common/components/input"
+import IndianPincodeInput from "@modules/common/components/indian-pincode-input"
 import Modal from "@modules/common/components/modal"
+import { getValidIndianPincodeOrEmpty } from "@lib/util/indian-pincode"
 import { Button } from "@modules/common/components/button"
 
 type EditOrderShippingAddressModalProps = {
@@ -103,12 +105,12 @@ export default function EditOrderShippingAddressModal({
               />
 
               <div className="grid grid-cols-[144px_1fr] gap-x-2">
-                <Input
+                <IndianPincodeInput
                   label="Postal code"
                   name="postal_code"
                   required
                   autoComplete="postal-code"
-                  defaultValue={address?.postal_code || ""}
+                  defaultValue={getValidIndianPincodeOrEmpty(address?.postal_code)}
                 />
                 <Input
                   label="City"

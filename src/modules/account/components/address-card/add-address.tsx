@@ -8,17 +8,18 @@ import { useEffect, useState, useActionState } from "react"
 import useToggleState from "@lib/hooks/use-toggle-state"
 import CountrySelect from "@modules/checkout/components/country-select"
 import Input from "@modules/common/components/input"
+import IndianPincodeInput from "@modules/common/components/indian-pincode-input"
 import Modal from "@modules/common/components/modal"
 import { SubmitButton } from "@modules/checkout/components/submit-button"
 import { addCustomerAddress } from "@lib/data/customer"
-import { Region } from "@/lib/supabase/types"
+import { Address, Region } from "@/lib/supabase/types"
 
 const AddAddress = ({
   region,
   addresses: _addresses,
 }: {
   region: Region
-  addresses: any[]
+  addresses: Address[]
 }) => {
   const [successState, setSuccessState] = useState(false)
   const { state, open, close: closeModal } = useToggleState(false)
@@ -100,7 +101,7 @@ const AddAddress = ({
                 data-testid="address-2-input"
               />
               <div className="grid grid-cols-[144px_1fr] gap-x-2">
-                <Input
+                <IndianPincodeInput
                   label="Postal code"
                   name="postal_code"
                   required
