@@ -1,10 +1,15 @@
 import Input from "@modules/common/components/input"
+import IndianPincodeInput from "@modules/common/components/indian-pincode-input"
 import React, { useCallback, useEffect, useMemo, useState } from "react"
 import { useDebounce } from "@lib/hooks/use-debounce"
 import AddressSelect from "../address-select"
 import CountrySelect from "../country-select"
 import { useCheckout } from "../../context/checkout-context"
 import { getCheckoutPhoneValue } from "@/lib/util/customer-phone"
+import {
+  getValidIndianPincodeOrEmpty,
+  isValidIndianPincode,
+} from "@lib/util/indian-pincode"
 import {
   Address as SavedAddress,
   Cart,
@@ -59,7 +64,9 @@ function buildFormData(
     "shipping_address.address_1": initialAddress?.address_1 || "",
     "shipping_address.company":
       initialAddress?.company || initialAddress?.address_2 || "",
-    "shipping_address.postal_code": initialAddress?.postal_code || "",
+    "shipping_address.postal_code": getValidIndianPincodeOrEmpty(
+      initialAddress?.postal_code
+    ),
     "shipping_address.city": initialAddress?.city || "",
     "shipping_address.country_code":
       initialAddress?.country_code ||
@@ -120,7 +127,9 @@ const ShippingAddress = ({
         "shipping_address.last_name": address.last_name || "",
         "shipping_address.address_1": address.address_1 || "",
         "shipping_address.company": address.company || address.address_2 || "",
-        "shipping_address.postal_code": address.postal_code || "",
+        "shipping_address.postal_code": getValidIndianPincodeOrEmpty(
+          address.postal_code
+        ),
         "shipping_address.city": address.city || "",
         "shipping_address.country_code":
           address.country_code ||
@@ -150,7 +159,7 @@ const ShippingAddress = ({
   )
 
   useEffect(() => {
-    if (!/^[1-9][0-9]{5}$/.test(debouncedPincode)) return
+    if (!isValidIndianPincode(debouncedPincode)) return
 
     let cancelled = false
     setPincodeLoading(true)
@@ -248,10 +257,9 @@ const ShippingAddress = ({
           autoComplete="organization"
           data-testid="shipping-company-input"
         />
-        <Input
+        <IndianPincodeInput
           label="Pincode"
           name="shipping_address.postal_code"
-          autoComplete="postal-code"
           value={formData["shipping_address.postal_code"] || ""}
           onChange={handleChange}
           required

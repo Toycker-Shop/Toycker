@@ -9,6 +9,7 @@ import { cn } from "@lib/util/cn"
 import useToggleState from "@lib/hooks/use-toggle-state"
 import CountrySelect from "@modules/checkout/components/country-select"
 import Input from "@modules/common/components/input"
+import IndianPincodeInput from "@modules/common/components/indian-pincode-input"
 import Modal from "@modules/common/components/modal"
 import Spinner from "@modules/common/icons/spinner"
 import { SubmitButton } from "@modules/checkout/components/submit-button"
@@ -16,6 +17,7 @@ import {
   deleteAdminCustomerAddress,
   updateAdminCustomerAddress,
 } from "@lib/data/admin"
+import { getValidIndianPincodeOrEmpty } from "@lib/util/indian-pincode"
 import { Address, Region } from "@/lib/supabase/types"
 
 type EditAddressProps = {
@@ -162,12 +164,12 @@ const EditAddressModal: React.FC<EditAddressProps> = ({ region, address }) => {
                 defaultValue={address.address_2 || ""}
               />
               <div className="grid grid-cols-[144px_1fr] gap-x-2">
-                <Input
+                <IndianPincodeInput
                   label="Postal code"
                   name="postal_code"
                   required
                   autoComplete="postal-code"
-                  defaultValue={address.postal_code || ""}
+                  defaultValue={getValidIndianPincodeOrEmpty(address.postal_code)}
                 />
                 <Input
                   label="City"

@@ -24,6 +24,7 @@ import {
 } from "@/lib/supabase/types"
 import { revalidatePath, revalidateTag } from "next/cache"
 import { redirect } from "next/navigation"
+import { INDIAN_PINCODE_ERROR, isValidIndianPincode } from "@/lib/util/indian-pincode"
 import { requirePermission } from "@/lib/permissions/server"
 import { PERMISSIONS } from "@/lib/permissions"
 import {
@@ -4328,6 +4329,14 @@ export async function updateOrderShippingAddress(
     return { success: false, error: "Order ID is required." }
   }
 
+  const rawPostalCode = formData.get("postal_code")
+  if (
+    typeof rawPostalCode !== "string" ||
+    !isValidIndianPincode(rawPostalCode)
+  ) {
+    return { success: false, error: INDIAN_PINCODE_ERROR }
+  }
+
   const shippingAddress = buildOrderShippingAddress(formData)
 
   if (
@@ -5066,6 +5075,14 @@ export async function updateAdminCustomerAddress(
   await ensureAdmin()
   const supabase = await createAdminClient()
   const addressId = formData.get("addressId") as string
+  const postalCode = formData.get("postal_code")
+  if (
+    typeof postalCode !== "string" ||
+    !isValidIndianPincode(postalCode)
+  ) {
+    return { success: false, error: INDIAN_PINCODE_ERROR }
+  }
+
 
   const address = {
     first_name: formData.get("first_name") as string,
@@ -5076,7 +5093,7 @@ export async function updateAdminCustomerAddress(
     city: formData.get("city") as string,
     country_code: formData.get("country_code") as string,
     province: formData.get("province") as string,
-    postal_code: formData.get("postal_code") as string,
+    postal_code: postalCode,
     phone: formData.get("phone") as string,
   }
 
