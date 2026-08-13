@@ -28,13 +28,42 @@ type PendingMetaEvent = {
   eventId?: string
 }
 
+type PendingGoogleEvent = {
+  eventName: string
+  parameters: GoogleEventParameters
+}
+
 const MAX_PENDING_META_EVENTS = 50
+const MAX_PENDING_GOOGLE_EVENTS = 50
 const pendingMetaEvents: PendingMetaEvent[] = []
+const pendingGoogleEvents: PendingGoogleEvent[] = []
 
 const getAnalyticsWindow = (): AnalyticsWindow => window as AnalyticsWindow
 
 export function trackGoogleEvent(eventName: string, parameters: GoogleEventParameters): void {
-  getAnalyticsWindow().gtag?.("event", eventName, parameters)
+  const gtag = getAnalyticsWindow().gtag
+
+  if (gtag) {
+    gtag("event", eventName, parameters)
+    return
+  }
+
+  if (pendingGoogleEvents.length >= MAX_PENDING_GOOGLE_EVENTS) {
+    pendingGoogleEvents.shift()
+  }
+
+  pendingGoogleEvents.push({ eventName, parameters })
+}
+
+export function flushPendingGoogleEvents(): void {
+  const gtag = getAnalyticsWindow().gtag
+  if (!gtag) return
+
+  while (pendingGoogleEvents.length > 0) {
+    const pendingEvent = pendingGoogleEvents.shift()
+    if (!pendingEvent) continue
+    gtag("event", pendingEvent.eventName, pendingEvent.parameters)
+  }
 }
 
 const createMetaEventId = (): string => {
