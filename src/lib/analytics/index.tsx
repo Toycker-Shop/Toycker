@@ -3,6 +3,7 @@
 import { GoogleTagManager } from "@next/third-parties/google"
 import { usePathname } from "next/navigation"
 import Script from "next/script"
+import { flushPendingGoogleEvents } from "@/lib/analytics/client-events"
 
 const ADMIN_PATH_PREFIX = "/admin"
 
@@ -28,6 +29,7 @@ export function ThirdPartyAnalytics({ googleAnalyticsMeasurementId }: { googleAn
             async
             src={`https://www.googletagmanager.com/gtag/js?id=${googleAnalyticsMeasurementId}`}
             strategy="afterInteractive"
+            onReady={flushPendingGoogleEvents}
           />
           <Script id="google-analytics-config" strategy="afterInteractive">
             {`window.dataLayer = window.dataLayer || []; window.gtag = window.gtag || function(){window.dataLayer.push(arguments);}; window.gtag('js', new Date()); window.gtag('config', '${googleAnalyticsMeasurementId}', { send_page_view: true });`}
