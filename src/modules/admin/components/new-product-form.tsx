@@ -14,6 +14,7 @@ import { PhotoIcon } from "@heroicons/react/24/outline"
 import { COLOR_SWATCH_MAP, STANDARD_COLORS } from "@/lib/constants/colors"
 import CategoryCheckboxList from "./category-checkbox-list"
 import MediaGallery from "./media-manager"
+import MultipleProductSelector from "./multiple-product-selector"
 import { slugify } from "@/lib/util/slug"
 import { DEFAULT_MANUAL_PRODUCT_STATUS } from "@/lib/util/product-visibility"
 import { useToast } from "@modules/common/context/toast-context"
@@ -33,6 +34,7 @@ export default function NewProductForm({ collections, categories }: NewProductFo
   const { showToast } = useToast()
   const [productType, setProductType] = useState<"single" | "variant">("single")
   const [variants, setVariants] = useState<VariantFormData[]>([])
+  const [familyIds, setFamilyIds] = useState<string[]>([])
   const [name, setName] = useState("")
   const [handle, setHandle] = useState("")
   const [isHandleManuallyEdited, setIsHandleManuallyEdited] = useState(false)
@@ -796,6 +798,22 @@ export default function NewProductForm({ collections, categories }: NewProductFo
                 name="collection_ids"
               />
             </div>
+            <div>
+              <div className="flex items-center gap-2 mb-4 pb-2 border-b border-gray-50">
+                <Layers className="w-4 h-4 text-black" />
+                <label className="block text-xs font-black text-black uppercase tracking-widest">Product Family</label>
+              </div>
+              <MultipleProductSelector
+                selectedIds={familyIds}
+                onChange={setFamilyIds}
+                name="product_family_ids"
+                maxSelections={null}
+                addLabel="Add Product Family Products"
+                selectedLabel="Product Family Products"
+                removeLabel="Remove from Product Family"
+              />
+            </div>
+
           </div>
         </AdminCard>
 

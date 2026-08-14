@@ -1,7 +1,7 @@
 import { listProducts } from "@lib/data/products"
 import { getRegion } from "@lib/data/regions"
 import { Product as SupabaseProduct } from "@/lib/supabase/types"
-import ProductPreview from "../product-preview"
+
 import RelatedProductsCarousel from "./related-products-carousel"
 
 type RelatedProductsProps = {

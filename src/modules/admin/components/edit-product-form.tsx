@@ -1,6 +1,6 @@
 "use client"
 
-import { Product, ProductVariant, Category, Collection } from "@/lib/supabase/types"
+import { Product, ProductVariant, Category, Collection, ProductFamilyAdminSummary } from "@/lib/supabase/types"
 import { updateProduct } from "@/lib/data/admin"
 import AdminCard from "./admin-card"
 import { SubmitButton } from "./submit-button"
@@ -31,6 +31,8 @@ type EditProductFormProps = {
   selectedCategoryIds: string[]
   selectedCollectionIds: string[]
   selectedRelatedProductIds: string[]
+  selectedFamilyProductIds: string[]
+  initialFamilyProducts: ProductFamilyAdminSummary[]
 }
 
 export default function EditProductForm({
@@ -40,9 +42,12 @@ export default function EditProductForm({
   collections,
   selectedCategoryIds,
   selectedCollectionIds,
-  selectedRelatedProductIds
+  selectedRelatedProductIds,
+  selectedFamilyProductIds,
+  initialFamilyProducts: familyProducts
 }: EditProductFormProps) {
   const [relatedIds, setRelatedIds] = useState<string[]>(selectedRelatedProductIds)
+  const [familyIds, setFamilyIds] = useState<string[]>(selectedFamilyProductIds)
   const [productType, setProductType] = useState<"single" | "variant">(
     variants.length > 0 ? "variant" : "single"
   )
@@ -83,6 +88,13 @@ export default function EditProductForm({
     handle: rc.related_product.handle,
     thumbnail: rc.related_product.image_url
   })) || [], [product.related_combinations])
+
+  const initialFamilyProductCards = useMemo(() => familyProducts.map((familyProduct) => ({
+    id: familyProduct.id,
+    title: familyProduct.name,
+    handle: familyProduct.handle,
+    thumbnail: familyProduct.image_url,
+  })), [familyProducts])
 
   return (
     <form action={updateProduct}>
@@ -482,6 +494,24 @@ export default function EditProductForm({
                   initialProducts={initialRelatedProducts}
                   onChange={setRelatedIds}
                   name="related_product_ids"
+                />
+              </div>
+
+              <div>
+                <div className="flex items-center gap-2 mb-4 pb-2 border-b border-gray-0">
+                  <Layers className="w-4 h-4 text-black" />
+                  <label className="block text-xs font-black text-black uppercase tracking-widest">Product Family</label>
+                </div>
+                <MultipleProductSelector
+                  selectedIds={familyIds}
+                  initialProducts={initialFamilyProductCards}
+                  onChange={setFamilyIds}
+                  name="product_family_ids"
+                  maxSelections={null}
+                  excludeProductId={product.id}
+                  addLabel="Add Product Family Products"
+                  selectedLabel="Product Family Products"
+                  removeLabel="Remove from Product Family"
                 />
               </div>
             </div>

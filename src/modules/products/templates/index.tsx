@@ -4,12 +4,14 @@ import ImageGallery from "@modules/products/components/image-gallery"
 import ProductTabs from "@modules/products/components/product-tabs"
 import RelatedProducts from "@modules/products/components/related-products"
 import SkeletonRelatedProducts from "@modules/skeletons/templates/skeleton-related-products"
+import SkeletonProductFamily from "@modules/skeletons/templates/skeleton-product-family"
 import Breadcrumbs from "@modules/common/components/breadcrumbs"
 import LazyLoadSection from "@modules/common/components/lazy-load-section"
 import { notFound } from "next/navigation"
 import { Product, Region } from "@/lib/supabase/types"
 
 import ProductActionsWrapper from "./product-actions-wrapper"
+import ProductFamily from "@modules/products/components/product-family"
 import CustomerReviewsServer from "@modules/products/components/customer-reviews/server"
 import RecentlyViewedTracker from "@modules/products/components/recently-viewed-tracker"
 import ProductViewTracker from "@modules/products/components/product-view-tracker"
@@ -120,45 +122,58 @@ const ProductTemplate = async ({
             <ImageGallery images={images} />
           </div>
           <div className="w-full xl:w-2/5">
-            <Suspense
-              fallback={
-                <div className="flex flex-col gap-y-4 animate-pulse">
-                  <div className="h-10 w-3/4 bg-gray-100 rounded" />
-                  <div className="h-6 w-1/2 bg-gray-100 rounded" />
-                  <div className="h-24 w-full bg-gray-100 rounded" />
-                </div>
-              }
+            <div
+              className="flex flex-col gap-6"
+              data-testid="product-detail-right-sections"
             >
-              <ProductActionsWrapper
-                product={product}
-                region={region}
-                clubDiscountPercentage={clubDiscountPercentage}
-                reviewStats={reviewStats}
-              />
-            </Suspense>
-            <div className="mt-6">
-              {/* Order information block temporarily hidden. */}
-              {(() => {
-                const videoId = getYoutubeId(product.video_url)
-                const embedUrl = getYoutubeEmbedUrl(videoId)
-
-                if (!embedUrl) return null
-
-                return (
-                  <div className="mt-6 aspect-video w-full overflow-hidden rounded-xl border border-slate-200">
-                    <iframe
-                      width="100%"
-                      height="100%"
-                      src={embedUrl}
-                      title="Product Video"
-                      loading="lazy"
-                      allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                      allowFullScreen
-                      className="border-0"
-                    />
+              <Suspense
+                fallback={
+                  <div className="flex flex-col gap-y-4 animate-pulse">
+                    <div className="h-10 w-3/4 bg-gray-100 rounded" />
+                    <div className="h-6 w-1/2 bg-gray-100 rounded" />
+                    <div className="h-24 w-full bg-gray-100 rounded" />
                   </div>
-                )
-              })()}
+                }
+              >
+                <ProductActionsWrapper
+                  product={product}
+                  region={region}
+                  clubDiscountPercentage={clubDiscountPercentage}
+                  reviewStats={reviewStats}
+                />
+              </Suspense>
+
+              <Suspense fallback={<SkeletonProductFamily />}>
+                <ProductFamily
+                  productId={product.id}
+                  clubDiscountPercentage={clubDiscountPercentage}
+                />
+              </Suspense>
+
+              <div>
+                {/* Order information block temporarily hidden. */}
+                {(() => {
+                  const videoId = getYoutubeId(product.video_url)
+                  const embedUrl = getYoutubeEmbedUrl(videoId)
+
+                  if (!embedUrl) return null
+
+                  return (
+                    <div className="aspect-video w-full overflow-hidden rounded-xl border border-slate-200">
+                      <iframe
+                        width="100%"
+                        height="100%"
+                        src={embedUrl}
+                        title="Product Video"
+                        loading="lazy"
+                        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                        allowFullScreen
+                        className="border-0"
+                      />
+                    </div>
+                  )
+                })()}
+              </div>
             </div>
           </div>
         </div>
@@ -169,9 +184,9 @@ const ProductTemplate = async ({
             <Suspense fallback={null}>
               <FrequentlyBoughtTogetherServer
                 product={product}
-                clubDiscountPercentage={clubDiscountPercentage}
-              />
-            </Suspense>
+                  clubDiscountPercentage={clubDiscountPercentage}
+                />
+              </Suspense>
           </LazyLoadSection>
           <LazyLoadSection minHeight="300px">
             <ProductTabs product={product} />
@@ -181,7 +196,7 @@ const ProductTemplate = async ({
             <LazyLoadSection minHeight="400px">
               <Suspense fallback={null}>
                 <CustomerReviewsServer
-                  productId={product.id}
+                    productId={product.id}
                   productHandle={product.handle}
                   productThumbnail={product.thumbnail || product.image_url}
                 />
