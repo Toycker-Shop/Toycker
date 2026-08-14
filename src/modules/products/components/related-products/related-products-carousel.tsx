@@ -1,6 +1,6 @@
 "use client"
 
-import React, { ReactNode } from "react"
+import React from "react"
 import useEmblaCarousel from "embla-carousel-react"
 import { Product as SupabaseProduct } from "@/lib/supabase/types"
 import ProductPreview from "../product-preview"

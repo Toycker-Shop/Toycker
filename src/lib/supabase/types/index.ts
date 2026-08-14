@@ -36,6 +36,18 @@ export interface Product {
   }[]
 }
 
+export interface ProductFamilyLink {
+  id: string
+  product_id: string
+  family_product_id: string
+  created_at: string
+}
+
+export type ProductFamilyAdminSummary = Pick<
+  Product,
+  "id" | "name" | "handle" | "image_url" | "thumbnail"
+>
+
 export interface ProductVariant {
   id: string
   title: string

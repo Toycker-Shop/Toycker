@@ -16,6 +16,7 @@ import {
   TrivaraOrderBooking,
   OrderEventType,
   ProductVariant,
+  ProductFamilyAdminSummary,
   VariantFormData,
   AdminRole,
   StaffMember,
@@ -1252,6 +1253,11 @@ export async function createProduct(
     await supabase.from("product_categories").insert(categoriesToInsert)
   }
 
+  const productFamilyIds = formData.getAll("product_family_ids") as string[]
+  if (newProduct && formData.has("product_family_ids_present")) {
+    await updateProductFamilyLinks(newProduct.id, productFamilyIds)
+  }
+
   revalidatePath("/admin/products")
   revalidateStorefrontProductPaths([newProduct?.handle])
   redirect("/admin/products")
@@ -1411,6 +1417,11 @@ export async function updateProduct(formData: FormData) {
     if (formData.has("related_product_ids_present")) {
       await updateProductCombinations(id, [])
     }
+  }
+
+  const productFamilyIds = formData.getAll("product_family_ids") as string[]
+  if (formData.has("product_family_ids_present")) {
+    await updateProductFamilyLinks(id, productFamilyIds)
   }
 
   revalidatePath("/admin/products")
@@ -1924,6 +1935,132 @@ export async function getProductCombinations(
   }
 
   return data.map((item) => item.related_product_id)
+}
+
+type ProductFamilyLinkIdRow = {
+  product_id: string
+  family_product_id: string
+}
+
+export async function getProductFamilyProducts(
+  productId: string
+): Promise<ProductFamilyAdminSummary[]> {
+  await ensureAdmin()
+  const supabase = await createClient()
+
+  const [outgoingResult, incomingResult] = await Promise.all([
+    supabase
+      .from("product_family_links")
+      .select("family_product_id")
+      .eq("product_id", productId),
+    supabase
+      .from("product_family_links")
+      .select("product_id")
+      .eq("family_product_id", productId),
+  ])
+
+  if (outgoingResult.error || incomingResult.error) {
+    console.error(
+      "Error fetching Product Family links:",
+      outgoingResult.error ?? incomingResult.error
+    )
+    return []
+  }
+
+  const relatedProductIds = Array.from(
+    new Set([
+      ...((outgoingResult.data ?? []) as Array<{ family_product_id: string }>).map(
+        (row) => row.family_product_id
+      ),
+      ...((incomingResult.data ?? []) as Array<{ product_id: string }>).map(
+        (row) => row.product_id
+      ),
+    ])
+  ).filter((relatedProductId) => relatedProductId !== productId)
+
+  if (relatedProductIds.length === 0) {
+    return []
+  }
+
+  const { data, error } = await supabase
+    .from("products")
+    .select("id, name, handle, image_url, thumbnail")
+    .in("id", relatedProductIds)
+
+  if (error) {
+    console.error("Error fetching Product Family products:", error)
+    return []
+  }
+
+  return (data ?? []) as ProductFamilyAdminSummary[]
+}
+
+export async function updateProductFamilyLinks(
+  productId: string,
+  familyProductIds: string[]
+) {
+  await ensureAdmin()
+  const supabase = await createClient()
+
+  const uniqueFamilyProductIds = Array.from(new Set(
+    familyProductIds
+      .map((familyProductId) => familyProductId.trim())
+      .filter((familyProductId) => familyProductId && familyProductId !== productId)
+  ))
+
+  const { data: existingLinks, error: existingLinksError } = await supabase
+    .from("product_family_links")
+    .select("product_id, family_product_id")
+    .or(`product_id.eq.${productId},family_product_id.eq.${productId}`)
+
+  if (existingLinksError) {
+    throw existingLinksError
+  }
+
+  const oldRelatedProductIds = ((existingLinks ?? []) as ProductFamilyLinkIdRow[]).map(
+    (link) => link.product_id === productId ? link.family_product_id : link.product_id
+  )
+
+  const { error: deleteError } = await supabase
+    .from("product_family_links")
+    .delete()
+    .or(`product_id.eq.${productId},family_product_id.eq.${productId}`)
+
+  if (deleteError) {
+    throw deleteError
+  }
+
+  const linksToInsert = uniqueFamilyProductIds.map((familyProductId) => {
+    const [firstProductId, secondProductId] = [productId, familyProductId].sort()
+    return {
+      product_id: firstProductId,
+      family_product_id: secondProductId,
+    }
+  })
+
+  if (linksToInsert.length > 0) {
+    const { error: insertError } = await supabase
+      .from("product_family_links")
+      .insert(linksToInsert)
+
+    if (insertError) {
+      throw insertError
+    }
+  }
+
+  const affectedProductIds = Array.from(new Set([
+    productId,
+    ...oldRelatedProductIds,
+    ...uniqueFamilyProductIds,
+  ]))
+  const { data: affectedProducts } = await supabase
+    .from("products")
+    .select("handle")
+    .in("id", affectedProductIds)
+
+  revalidateStorefrontProductPaths(
+    (affectedProducts ?? []).map((product) => product.handle)
+  )
 }
 
 export async function updateProductCombinations(

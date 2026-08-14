@@ -539,6 +539,57 @@ export const getProductByHandle = cache(async function getProductByHandle(handle
   return normalizeProductImage(data as unknown as Product)
 })
 
+type ProductFamilyRelationRow = {
+  family_product: Product | null
+  product: Product | null
+}
+
+export const listProductFamilyProducts = cache(async function listProductFamilyProducts(
+  productId: string
+): Promise<Product[]> {
+  const supabase = createPublicClient()
+
+  const [outgoingResult, incomingResult] = await Promise.all([
+    supabase
+      .from("product_family_links")
+      .select(`family_product:products!family_product_id(${PRODUCT_CARD_SELECT})`)
+      .eq("product_id", productId),
+    supabase
+      .from("product_family_links")
+      .select(`product:products!product_id(${PRODUCT_CARD_SELECT})`)
+      .eq("family_product_id", productId),
+  ])
+
+  if (outgoingResult.error || incomingResult.error) {
+    console.error(
+      "Error listing Product Family products:",
+      outgoingResult.error?.message ?? incomingResult.error?.message
+    )
+    return []
+  }
+
+  const rows = [
+    ...((outgoingResult.data ?? []) as unknown as ProductFamilyRelationRow[]),
+    ...((incomingResult.data ?? []) as unknown as ProductFamilyRelationRow[]),
+  ]
+  const seenProductIds = new Set<string>()
+
+  return rows
+    .map((row) => row.family_product ?? row.product)
+    .filter((relatedProduct): relatedProduct is Product =>
+      Boolean(
+        relatedProduct &&
+          relatedProduct.id !== productId &&
+          relatedProduct.status === ACTIVE_PRODUCT_STATUS &&
+          !seenProductIds.has(relatedProduct.id)
+      )
+    )
+    .map((relatedProduct) => {
+      seenProductIds.add(relatedProduct.id)
+      return normalizeProductImage(relatedProduct)
+    })
+})
+
 export const listFrequentlyBoughtTogetherProducts = cache(async function listFrequentlyBoughtTogetherProducts(
   productId: string
 ): Promise<Product[]> {

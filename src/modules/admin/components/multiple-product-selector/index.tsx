@@ -1,9 +1,10 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { ChevronDownIcon, MagnifyingGlassIcon, XMarkIcon } from "@heroicons/react/24/outline"
+import { ChevronDownIcon } from "@heroicons/react/24/outline"
 import { PlusCircle, ShoppingBag, Trash2, Search, Layers } from "lucide-react"
 import { cn } from "@/lib/util/cn"
+import { useOptionalToast } from "@modules/common/context/toast-context"
 
 type Product = {
     id: string
@@ -18,6 +19,11 @@ type Props = {
     onChange: (_productIds: string[]) => void
     name?: string
     disabled?: boolean
+    maxSelections?: number | null
+    excludeProductId?: string
+    addLabel?: string
+    selectedLabel?: string
+    removeLabel?: string
 }
 
 export default function MultipleProductSelector({
@@ -25,13 +31,21 @@ export default function MultipleProductSelector({
     initialProducts = [],
     onChange,
     name = "related_product_ids",
-    disabled = false
+    disabled = false,
+    maxSelections = 2,
+    excludeProductId,
+    addLabel = "Add Related Products",
+    selectedLabel = "Bundle Selection",
+    removeLabel = "Remove from bundle"
 }: Props) {
     const [isOpen, setIsOpen] = useState(false)
     const [products, setProducts] = useState<Product[]>(initialProducts)
     const [search, setSearch] = useState("")
     const [loading, setLoading] = useState(false)
     const [hasLoadedFull, setHasLoadedFull] = useState(false)
+    const toast = useOptionalToast()
+
+    const visibleSelectedIds = selectedIds.filter((id) => id !== excludeProductId)
 
     useEffect(() => {
         const loadProducts = async () => {
@@ -65,20 +79,35 @@ export default function MultipleProductSelector({
     const filteredProducts = products.filter((product) =>
         (product.title.toLowerCase().includes(search.toLowerCase()) ||
             product.handle.toLowerCase().includes(search.toLowerCase())) &&
-        !selectedIds.includes(product.id)
+        !visibleSelectedIds.includes(product.id) &&
+        product.id !== excludeProductId
     )
 
     const toggleProduct = (productId: string) => {
-        if (selectedIds.includes(productId)) {
-            onChange(selectedIds.filter(id => id !== productId))
+        if (productId === excludeProductId) {
+            toast?.showToast(
+                "A product cannot be added to its own Product Family.",
+                "error",
+                "Invalid Product Family"
+            )
+            return
+        }
+
+        if (visibleSelectedIds.includes(productId)) {
+            onChange(visibleSelectedIds.filter(id => id !== productId))
         } else {
-            if (selectedIds.length >= 2) return
-            onChange([...selectedIds, productId])
+            if (isAtSelectionLimit) return
+            onChange([...visibleSelectedIds, productId])
         }
     }
 
+    const isAtSelectionLimit =
+        maxSelections !== null &&
+        maxSelections !== undefined &&
+        visibleSelectedIds.length >= maxSelections
+
     const removeProduct = (productId: string) => {
-        onChange(selectedIds.filter(id => id !== productId))
+        onChange(visibleSelectedIds.filter(id => id !== productId))
     }
 
     return (
@@ -102,7 +131,7 @@ export default function MultipleProductSelector({
                             "text-sm font-black uppercase tracking-widest transition-colors duration-300",
                             isOpen ? "text-black" : "text-gray-500 group-hover:text-black"
                         )}>
-                            {isOpen ? "Close Selector" : "Add Related Products"}
+                            {isOpen ? "Close Selector" : addLabel}
                         </span>
                     </div>
                     <ChevronDownIcon className={`h-5 w-5 text-gray-400 transition-transform duration-500 ${isOpen ? "rotate-180 text-black" : "group-hover:text-black"}`} />
@@ -167,13 +196,13 @@ export default function MultipleProductSelector({
                                             </div>
                                             <div className={cn(
                                                 "transition-all transform translate-x-2 group-hover:translate-x-0",
-                                                selectedIds.length >= 2 ? "opacity-30 grayscale cursor-not-allowed" : "opacity-0 group-hover:opacity-100"
+                                                isAtSelectionLimit ? "opacity-30 grayscale cursor-not-allowed" : "opacity-0 group-hover:opacity-100"
                                             )}>
                                                 <div className={cn(
                                                     "px-4 py-2 text-white text-[10px] font-black uppercase tracking-widest rounded-xl shadow-lg transition-all",
-                                                    selectedIds.length >= 2 ? "bg-gray-400" : "bg-black shadow-black/20 hover:bg-gray-800 active:scale-95"
+                                                    isAtSelectionLimit ? "bg-gray-400" : "bg-black shadow-black/20 hover:bg-gray-800 active:scale-95"
                                                 )}>
-                                                    {selectedIds.length >= 2 ? "Full" : "Select"}
+                                                    {isAtSelectionLimit ? "Full" : "Select"}
                                                 </div>
                                             </div>
                                         </button>
@@ -186,22 +215,22 @@ export default function MultipleProductSelector({
             </div>
 
             {/* Selected Products List */}
-            {selectedIds.length > 0 && (
+            {visibleSelectedIds.length > 0 && (
                 <div className="bg-gray-50/50 rounded-2xl border border-gray-100 p-5 space-y-5 animate-in fade-in duration-500 shadow-sm">
                     <div className="flex items-center justify-between px-1">
                         <div className="flex items-center gap-2.5">
                             <Layers className="w-4 h-4 text-black" />
-                            <h3 className="text-[11px] font-black text-black uppercase tracking-[0.2em]">Bundle Selection</h3>
+                            <h3 className="text-[11px] font-black text-black uppercase tracking-[0.2em]">{selectedLabel}</h3>
                         </div>
                         <div className="flex items-center gap-2">
                             <span className="text-[10px] font-bold text-gray-500 bg-white border border-gray-100 px-2.5 py-1 rounded-lg shadow-sm">
-                                {selectedIds.length} {selectedIds.length === 1 ? 'item' : 'items'}
+                                {visibleSelectedIds.length} {visibleSelectedIds.length === 1 ? 'item' : 'items'}
                             </span>
                         </div>
                     </div>
 
                     <div className="grid grid-cols-1 gap-2.5">
-                        {selectedIds.map(id => {
+                        {visibleSelectedIds.map(id => {
                             const p = products.find(prod => prod.id === id)
                             return (
                                 <div key={id} className="group relative flex items-center justify-between bg-white p-3.5 rounded-xl border border-gray-200/50 shadow-sm hover:shadow-md hover:border-black/10 transition-all duration-300 animate-in slide-in-from-left-2">
@@ -231,7 +260,7 @@ export default function MultipleProductSelector({
                                         type="button"
                                         onClick={() => removeProduct(id)}
                                         className="p-2.5 bg-gray-50 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-xl transition-all shadow-sm group-hover:shadow hover:scale-110 active:scale-95"
-                                        title="Remove from bundle"
+                                        title={removeLabel}
                                     >
                                         <Trash2 className="h-4.5 w-4.5" />
                                     </button>

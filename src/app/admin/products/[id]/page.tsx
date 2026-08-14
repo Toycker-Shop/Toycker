@@ -5,6 +5,7 @@ import {
   getAdminCategories,
   getProductCategories,
   getProductCombinations,
+  getProductFamilyProducts,
 } from "@/lib/data/admin"
 import Link from "next/link"
 import { retrieveProduct } from "@lib/data/products"
@@ -30,6 +31,7 @@ export default async function EditProduct({
     productCollections,
     productCategoriesIds,
     relatedProductIds,
+    familyProducts,
   ] = await Promise.all([
     retrieveProduct(id),
     getAdminCollections({ limit: -1 }),
@@ -38,6 +40,7 @@ export default async function EditProduct({
     getProductCollections(id),
     getProductCategories(id),
     getProductCombinations(id),
+    getProductFamilyProducts(id),
   ])
 
   const collections = collectionsData.collections
@@ -89,6 +92,8 @@ export default async function EditProduct({
         selectedCategoryIds={selectedCategoryIds}
         selectedCollectionIds={selectedCollectionIds}
         selectedRelatedProductIds={relatedProductIds}
+        selectedFamilyProductIds={familyProducts.map((familyProduct) => familyProduct.id)}
+        initialFamilyProducts={familyProducts}
       />
     </div>
   )
