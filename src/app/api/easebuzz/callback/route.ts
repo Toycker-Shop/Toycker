@@ -11,6 +11,7 @@ import {
   OrderPricingMetadata,
 } from "@/lib/util/order-pricing"
 import { getCustomerFacingEmail } from "@/lib/util/customer-email"
+import { sendGa4PurchaseEventForOrderId } from "@/lib/integrations/ga4"
 import { sendMetaPurchaseEvent } from "@/lib/integrations/meta-capi"
 
 export const dynamic = "force-dynamic"
@@ -454,6 +455,7 @@ export async function POST(request: NextRequest) {
         }
       }
 
+      await sendGa4PurchaseEventForOrderId(finalizedOrderData.id)
       await sendMetaPurchaseEvent(finalizedOrderData)
       console.log(
         "[EASEBUZZ] Order processed successfully:",

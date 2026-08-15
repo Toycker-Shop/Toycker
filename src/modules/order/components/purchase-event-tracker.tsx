@@ -10,6 +10,7 @@ export default function PurchaseEventTracker({ order, enabled }: { order: Order;
 
   useEffect(() => {
     if (!enabled || trackedOrderId.current === order.id) return
+    if (typeof order.metadata?.ga4_purchase_sent_at === "string") return
     const items: MarketingItem[] = (order.items ?? [])
       .filter((item) => item.metadata?.gift_wrap_line !== true)
       .map((item) => ({
@@ -23,7 +24,8 @@ export default function PurchaseEventTracker({ order, enabled }: { order: Order;
 
     if (items.length === 0) return
     trackedOrderId.current = order.id
-    trackPurchaseEvent(order.id, items, order.total_amount, order.currency_code.toUpperCase())
+    const itemValue = items.reduce((total, item) => total + item.price * item.quantity, 0)
+    trackPurchaseEvent(order.id, items, Number(itemValue.toFixed(2)), order.currency_code.toLowerCase())
   }, [enabled, order])
 
   return null

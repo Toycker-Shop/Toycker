@@ -23,6 +23,7 @@ import {
   RewardTransactionWithOrder,
   PartialPaymentRule,
 } from "@/lib/supabase/types"
+import { sendGa4PurchaseEventForOrderId } from "@/lib/integrations/ga4"
 import { revalidatePath, revalidateTag } from "next/cache"
 import { redirect } from "next/navigation"
 import { INDIAN_PINCODE_ERROR, isValidIndianPincode } from "@/lib/util/indian-pincode"
@@ -2725,6 +2726,8 @@ export async function updateOrderStatus(id: string, status: string) {
   const { error } = await supabase.from("orders").update(updates).eq("id", id)
   if (error) throw error
 
+  await sendGa4PurchaseEventForOrderId(id)
+
   // Deduct Club Membership savings if cancelled
   if (status === "cancelled") {
     try {
@@ -4072,6 +4075,8 @@ export async function acceptOrder(orderId: string) {
 
   if (error) throw error
 
+  await sendGa4PurchaseEventForOrderId(orderId)
+
   await logOrderEvent(
     orderId,
     "processing",
@@ -4139,6 +4144,8 @@ export async function markPartialPaymentBalancePaid(
     .eq("id", orderId)
 
   if (updateError) throw updateError
+
+  await sendGa4PurchaseEventForOrderId(orderId)
 
   const { syncClubMembershipForOrder } = await import("@lib/data/club")
   await syncClubMembershipForOrder(orderId, "partial_payment_completed")
@@ -4311,6 +4318,8 @@ async function markOrderDeliveredWithSideEffects(
   if (updateError) {
     throw new Error(updateError.message)
   }
+
+  await sendGa4PurchaseEventForOrderId(orderId)
 
   const { syncClubMembershipForOrder } = await import("@lib/data/club")
   await syncClubMembershipForOrder(orderId, "order_delivered")
@@ -4707,6 +4716,8 @@ export async function autoFulfillOrderFromTrivara(
     throw new Error(updateError.message)
   }
 
+  await sendGa4PurchaseEventForOrderId(orderId)
+
   await logOrderEvent(
     orderId,
     "shipped",
@@ -4792,6 +4803,8 @@ export async function fulfillOrder(orderId: string, formData: FormData) {
     .eq("id", orderId)
 
   if (error) throw new Error(error.message)
+
+  await sendGa4PurchaseEventForOrderId(orderId)
 
   // Log timeline event
   const description = `Order shipped via ${partnerName}. AWB: ${awbNumber}`
