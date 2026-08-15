@@ -170,6 +170,7 @@ const ExclusiveCard = ({
       </div>
       <LocalizedClientLink
         href={`/products/${productHandle}`}
+        prefetch={false}
         className="flex items-center gap-3 bg-[#dbfca7] p-4 text-[#3a5017] hover:bg-[#cff798] transition-colors"
       >
         <div className="relative h-14 w-14 overflow-hidden rounded-xl border border-white/60 shrink-0">

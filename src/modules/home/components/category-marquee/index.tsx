@@ -123,6 +123,7 @@ const CategoryMarquee = () => {
             <Fragment key={`${item.id}-${index}`}>
               <Link
                 href={`/categories/${item.slug}`}
+                prefetch={false}
                 className="flex items-center gap-3 whitespace-nowrap px-4 text-black transition-colors hover:text-[#5921ff] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-white"
                 aria-hidden={item.isDuplicate}
                 tabIndex={item.isDuplicate ? -1 : undefined}
