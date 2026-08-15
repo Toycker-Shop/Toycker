@@ -71,7 +71,7 @@ export default async function AdminDashboard() {
         <AdminCard title="Recent Orders" className="p-0 lg:col-span-2">
           <div className="divide-y divide-gray-100">
             {latestOrders.map(order => (
-              <Link key={order.id} href={`/admin/orders/${order.id}`} className="flex items-center justify-between p-4 hover:bg-gray-50 transition-colors group">
+              <Link key={order.id} href={`/admin/orders/${order.id}`} prefetch={false} className="flex items-center justify-between p-4 hover:bg-gray-50 transition-colors group">
                 <div className="flex items-center gap-4">
                   <div className="h-10 w-10 rounded-lg bg-[#f1f2f4] flex items-center justify-center text-gray-500 border border-[#e1e3e5]">
                     <ShoppingBagIcon className="h-5 w-5" />

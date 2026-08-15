@@ -84,6 +84,7 @@ const AgeStar = ({
   return (
     <Link
       href={`/collections/${id}`}
+      prefetch={false}
       className="group flex min-w-[6rem] md:min-w-[10rem] flex-col items-center focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-ui-border-strong"
       aria-label={`${title} ${subtitle}`}
     >
