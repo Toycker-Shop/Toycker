@@ -10,6 +10,7 @@ import { Order, PaymentCollection } from "@/lib/supabase/types"
 import { resolveCustomerPhone } from "@/lib/util/customer-contact-phone"
 import { INDIAN_PINCODE_ERROR, INDIAN_PINCODE_PATTERN } from "@/lib/util/indian-pincode"
 import { getCheckoutPhoneValue } from "@/lib/util/customer-phone"
+import { sendGa4PurchaseEventForOrderId } from "@/lib/integrations/ga4"
 import { sendMetaPurchaseEvent } from "@/lib/integrations/meta-capi"
 
 // Validation schema for checkout data
@@ -158,12 +159,14 @@ export async function completeCheckout(
     const requestCookies = await cookies()
     const requestHeaders = await headers()
     const marketingIdentifiers: Record<string, string> = {}
+    const gaClientId = requestCookies.get("_ga")?.value.trim()
     const visitorId = requestCookies.get("toycker_meta_visitor_id")?.value.trim()
     const fbp = requestCookies.get("_fbp")?.value.trim()
     const fbc = requestCookies.get("_fbc")?.value.trim()
     const clientIp = getClientIp(requestHeaders)
     const clientUserAgent = requestHeaders.get("user-agent")?.trim()
 
+    if (gaClientId) marketingIdentifiers.ga_client_id = gaClientId
     if (visitorId) marketingIdentifiers.visitor_id = visitorId
     if (fbp) marketingIdentifiers.fbp = fbp
     if (fbc) marketingIdentifiers.fbc = fbc
@@ -341,6 +344,34 @@ export async function completeCheckout(
       .eq("id", result.order_id)
       .single()
 
+
+    if (orderData && Object.keys(marketingIdentifiers).length > 0) {
+      const existingMetadata = isRecord(orderData.metadata)
+        ? orderData.metadata
+        : {}
+      const existingMarketing = isRecord(existingMetadata.marketing)
+        ? existingMetadata.marketing
+        : {}
+      const metadata = {
+        ...existingMetadata,
+        marketing: {
+          ...existingMarketing,
+          ...marketingIdentifiers,
+        },
+      }
+
+      const { error: orderMetadataError } = await orderSupabase
+        .from("orders")
+        .update({ metadata })
+        .eq("id", result.order_id)
+
+      if (orderMetadataError) {
+        console.warn(
+          "Failed to persist marketing identifiers on order:",
+          orderMetadataError,
+        )
+      }
+    }
     // Step 4: For non-gateway payments (COD, manual), run post-order logic now.
     // Gateway payments (PayU, Easebuzz) handle this in their callback after payment verification.
 
@@ -356,6 +387,7 @@ export async function completeCheckout(
           checkoutData.rewardsToApply
         )
       }
+      await sendGa4PurchaseEventForOrderId(result.order_id)
       await sendMetaPurchaseEvent(orderData as unknown as Order)
     }
 

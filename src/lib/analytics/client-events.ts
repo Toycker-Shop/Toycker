@@ -168,7 +168,8 @@ export function trackCartEvent(
 }
 
 export function trackPurchaseEvent(orderId: string, items: MarketingItem[], value: number, currency: string): void {
-  trackGoogleEvent("purchase", { transaction_id: orderId, currency, value, items })
+  const normalizedCurrency = currency.toLowerCase()
+  trackGoogleEvent("purchase", { transaction_id: orderId, currency: normalizedCurrency, value, items })
   const metaContents: MetaContent[] = items.map((item) => ({
     id: item.meta_content_id ?? item.item_id,
     quantity: item.quantity,
@@ -179,7 +180,7 @@ export function trackPurchaseEvent(orderId: string, items: MarketingItem[], valu
     contents: metaContents,
     content_type: "product",
     value,
-    currency: currency.toUpperCase(),
+    currency: normalizedCurrency.toUpperCase(),
     num_items: items.reduce((total, item) => total + item.quantity, 0),
     order_id: orderId,
   }, orderId)
