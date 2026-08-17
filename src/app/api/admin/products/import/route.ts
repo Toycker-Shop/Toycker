@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
 import { CsvProductRow, ImportStats } from "@/lib/types/import"
 import Papa from "papaparse"
-import { revalidatePath } from "next/cache"
+import { revalidatePath, revalidateTag } from "next/cache"
 import {
     validateMediaUrlList,
     validateNoSupabaseStorageMediaUrl,
@@ -352,6 +352,7 @@ export async function POST(request: NextRequest) {
 
         revalidatePath("/admin/products")
         revalidatePath("/")
+        revalidateTag("storefront-catalog", "max")
 
         return NextResponse.json({
             success: true,

@@ -16,6 +16,7 @@ import CustomerReviewsServer from "@modules/products/components/customer-reviews
 import RecentlyViewedTracker from "@modules/products/components/recently-viewed-tracker"
 import ProductViewTracker from "@modules/products/components/product-view-tracker"
 import { getProductReviewStats } from "@/lib/actions/reviews"
+import { getGlobalSettings } from "@lib/data/settings"
 import FrequentlyBoughtTogetherServer from "@modules/products/components/frequently-bought-together/server"
 
 import { getYoutubeId, getYoutubeEmbedUrl } from "@/lib/util/youtube"
@@ -39,7 +40,10 @@ const ProductTemplate = async ({
     return notFound()
   }
 
-  const reviewStats = await getProductReviewStats(product.id)
+  const [reviewStats, globalSettings] = await Promise.all([
+    getProductReviewStats(product.id),
+    getGlobalSettings(),
+  ])
 
   const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || "https://toycker.com"
 
@@ -140,6 +144,10 @@ const ProductTemplate = async ({
                   region={region}
                   clubDiscountPercentage={clubDiscountPercentage}
                   reviewStats={reviewStats}
+                  giftWrapSettings={{
+                    fee: globalSettings.gift_wrap_fee,
+                    enabled: globalSettings.is_gift_wrap_enabled,
+                  }}
                 />
               </Suspense>
 

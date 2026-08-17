@@ -11,6 +11,7 @@ export function AdminSettingsLink({ onClick }: { onClick?: () => void } = {}) {
   return (
     <Link
       href="/admin/settings"
+      prefetch={false}
       onClick={onClick}
       className={`group flex items-center gap-3 px-3 py-2.5 text-sm font-medium rounded-lg transition-all ${
         active

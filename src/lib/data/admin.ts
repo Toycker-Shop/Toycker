@@ -23,7 +23,7 @@ import {
   RewardTransactionWithOrder,
   PartialPaymentRule,
 } from "@/lib/supabase/types"
-import { revalidatePath, revalidateTag } from "next/cache"
+import { revalidatePath, revalidateTag, updateTag } from "next/cache"
 import { redirect } from "next/navigation"
 import { INDIAN_PINCODE_ERROR, isValidIndianPincode } from "@/lib/util/indian-pincode"
 import { requirePermission } from "@/lib/permissions/server"
@@ -256,7 +256,8 @@ function revalidateStorefrontProductPaths(
   revalidatePath("/products/[handle]", "page")
   revalidatePath("/collections/[handle]", "page")
   revalidatePath("/categories/[...category]", "page")
-  revalidateTag("products", "max")
+  updateTag("products")
+  updateTag("storefront-catalog")
 
   uniqueHandles.forEach((handle) => {
     revalidatePath(`/products/${handle}`)
@@ -810,7 +811,8 @@ export async function createCategory(formData: FormData) {
 
   revalidatePath("/admin/categories", "page")
   revalidatePath("/categories", "page")
-  revalidateTag("categories", "max")
+  updateTag("categories")
+  updateTag("storefront-catalog")
   redirect("/admin/categories")
 }
 
@@ -857,7 +859,8 @@ export async function updateCategory(formData: FormData) {
   revalidatePath("/admin/categories", "page")
   revalidatePath(`/admin/categories/${id}`, "page")
   revalidatePath("/categories", "page")
-  revalidateTag("categories", "max")
+  updateTag("categories")
+  updateTag("storefront-catalog")
   redirect("/admin/categories")
 }
 
@@ -2150,7 +2153,8 @@ export async function createCollection(formData: FormData) {
 
   revalidatePath("/admin/collections", "page")
   revalidatePath("/collections", "page")
-  revalidateTag("collections", "max")
+  updateTag("collections")
+  updateTag("storefront-catalog")
   redirect("/admin/collections")
 }
 
@@ -2205,7 +2209,8 @@ export async function updateCollection(formData: FormData) {
   revalidatePath("/admin/collections", "page")
   revalidatePath(`/admin/collections/${id}`, "page")
   revalidatePath("/collections", "page")
-  revalidateTag("collections", "max")
+  updateTag("collections")
+  updateTag("storefront-catalog")
   redirect("/admin/collections")
 }
 
@@ -2216,7 +2221,8 @@ export async function deleteCollection(id: string) {
   await supabase.from("collections").delete().eq("id", id)
   revalidatePath("/admin/collections", "page")
   revalidatePath("/collections", "page")
-  revalidateTag("collections", "max")
+  updateTag("collections")
+  updateTag("storefront-catalog")
 }
 
 export async function getCollectionProducts(

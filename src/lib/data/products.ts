@@ -1,6 +1,7 @@
 "use server"
 
 import { cache } from "react"
+import { unstable_cache } from "next/cache"
 import { createPublicClient } from "@/lib/supabase/public-server"
 import { createClient } from "@/lib/supabase/server"
 import { Product } from "@/lib/supabase/types"
@@ -17,6 +18,9 @@ import {
   MIN_SEARCH_QUERY_LENGTH,
   SEARCH_MAX_QUERY_LENGTH,
 } from "@/lib/constants/search"
+
+const STOREFRONT_CACHE_TTL = 600
+const STOREFRONT_CATALOG_TAG = "storefront-catalog"
 
 const normalizeProductSearchQuery = (value: string | string[] | undefined) => {
   const rawValue = Array.isArray(value) ? value[0] : value
@@ -416,7 +420,7 @@ const getProductFilterInputs = (
   searchQuery: normalizeProductSearchQuery(queryParams?.q),
 })
 
-export const listProducts = cache(async function listProducts(options: {
+const listProductsInternal = async function listProducts(options: {
   regionId?: string
   queryParams?: {
     limit?: number
@@ -472,9 +476,17 @@ export const listProducts = cache(async function listProducts(options: {
 
   const products = (data || []).map((p) => normalizeProductImage(p as unknown as Product))
   return { response: { products, count: count || 0 } }
-})
+}
 
-export const getStorefrontPriceBounds = cache(async function getStorefrontPriceBounds({
+const listProductsCached = unstable_cache(
+  listProductsInternal,
+  ["storefront-products-list"],
+  { revalidate: STOREFRONT_CACHE_TTL, tags: [STOREFRONT_CATALOG_TAG, "products"] }
+)
+
+export const listProducts = cache(listProductsCached)
+
+const getStorefrontPriceBoundsInternal = async function getStorefrontPriceBounds({
   queryParams,
   availability,
 }: {
@@ -512,7 +524,15 @@ export const getStorefrontPriceBounds = cache(async function getStorefrontPriceB
     min: parsePriceBound(boundsRow.min_price),
     max: parsePriceBound(boundsRow.max_price),
   })
-})
+}
+
+const getStorefrontPriceBoundsCached = unstable_cache(
+  getStorefrontPriceBoundsInternal,
+  ["storefront-price-bounds"],
+  { revalidate: STOREFRONT_CACHE_TTL, tags: [STOREFRONT_CATALOG_TAG, "products"] }
+)
+
+export const getStorefrontPriceBounds = cache(getStorefrontPriceBoundsCached)
 
 export const retrieveProduct = cache(async function retrieveProduct(id: string): Promise<Product | null> {
   const supabase = await createClient()
@@ -526,7 +546,7 @@ export const retrieveProduct = cache(async function retrieveProduct(id: string):
   return normalizeProductImage(data as unknown as Product)
 })
 
-export const getProductByHandle = cache(async function getProductByHandle(handle: string): Promise<Product | null> {
+const getProductByHandleInternal = async function getProductByHandle(handle: string): Promise<Product | null> {
   const supabase = createPublicClient()
   const { data, error } = await supabase
     .from("products")
@@ -537,14 +557,22 @@ export const getProductByHandle = cache(async function getProductByHandle(handle
 
   if (error || !data) return null
   return normalizeProductImage(data as unknown as Product)
-})
+}
+
+const getProductByHandleCached = unstable_cache(
+  getProductByHandleInternal,
+  ["storefront-product-by-handle"],
+  { revalidate: STOREFRONT_CACHE_TTL, tags: [STOREFRONT_CATALOG_TAG, "products"] }
+)
+
+export const getProductByHandle = cache(getProductByHandleCached)
 
 type ProductFamilyRelationRow = {
   family_product: Product | null
   product: Product | null
 }
 
-export const listProductFamilyProducts = cache(async function listProductFamilyProducts(
+const listProductFamilyProductsInternal = async function listProductFamilyProducts(
   productId: string
 ): Promise<Product[]> {
   const supabase = createPublicClient()
@@ -588,9 +616,17 @@ export const listProductFamilyProducts = cache(async function listProductFamilyP
       seenProductIds.add(relatedProduct.id)
       return normalizeProductImage(relatedProduct)
     })
-})
+}
 
-export const listFrequentlyBoughtTogetherProducts = cache(async function listFrequentlyBoughtTogetherProducts(
+const listProductFamilyProductsCached = unstable_cache(
+  listProductFamilyProductsInternal,
+  ["storefront-product-family"],
+  { revalidate: STOREFRONT_CACHE_TTL, tags: [STOREFRONT_CATALOG_TAG, "products"] }
+)
+
+export const listProductFamilyProducts = cache(listProductFamilyProductsCached)
+
+const listFrequentlyBoughtTogetherProductsInternal = async function listFrequentlyBoughtTogetherProducts(
   productId: string
 ): Promise<Product[]> {
   const supabase = createPublicClient()
@@ -615,9 +651,17 @@ export const listFrequentlyBoughtTogetherProducts = cache(async function listFre
   return data
     .flatMap((row) => row.related_product ?? [])
     .map((product) => normalizeProductImage(product as unknown as Product))
-})
+}
 
-export const listPaginatedProducts = cache(async function listPaginatedProducts({
+const listFrequentlyBoughtTogetherProductsCached = unstable_cache(
+  listFrequentlyBoughtTogetherProductsInternal,
+  ["storefront-frequently-bought-together"],
+  { revalidate: STOREFRONT_CACHE_TTL, tags: [STOREFRONT_CATALOG_TAG, "products"] }
+)
+
+export const listFrequentlyBoughtTogetherProducts = cache(listFrequentlyBoughtTogetherProductsCached)
+
+const listPaginatedProductsInternal = async function listPaginatedProducts({
   page = 1,
   limit = 12,
   sortBy = "featured",
@@ -755,4 +799,12 @@ export const listPaginatedProducts = cache(async function listPaginatedProducts(
     },
     pagination: { page: range.page, limit: range.limit },
   }
-})
+}
+
+const listPaginatedProductsCached = unstable_cache(
+  listPaginatedProductsInternal,
+  ["storefront-products-paginated"],
+  { revalidate: STOREFRONT_CACHE_TTL, tags: [STOREFRONT_CATALOG_TAG, "products"] }
+)
+
+export const listPaginatedProducts = cache(listPaginatedProductsCached)

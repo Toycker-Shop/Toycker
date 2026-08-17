@@ -47,6 +47,7 @@ type ProductActionsProps = {
   syncVariantParam?: boolean
   clubDiscountPercentage?: number
   reviewStats?: { average: number; count: number }
+  giftWrapSettings?: { fee: number; enabled: boolean }
 }
 
 const optionsAsKeymap = (variantOptions?: ProductOptionValue[]) => {
@@ -66,6 +67,7 @@ export default function ProductActions({
   onActionComplete,
   clubDiscountPercentage,
   reviewStats,
+  giftWrapSettings: giftWrapSettingsProp,
 }: ProductActionsProps) {
   const router = useRouter()
   const pathname = usePathname()
@@ -80,9 +82,14 @@ export default function ProductActions({
   const [giftWrapSettings, setGiftWrapSettings] = useState<{
     fee: number
     enabled: boolean
-  }>({ fee: 50, enabled: true })
+  }>(giftWrapSettingsProp ?? { fee: 50, enabled: true })
 
   useEffect(() => {
+    if (giftWrapSettingsProp) {
+      setGiftWrapSettings(giftWrapSettingsProp)
+      return
+    }
+
     const fetchSettings = async () => {
       try {
         const { getGlobalSettings } = await import("@lib/data/settings")
@@ -96,7 +103,7 @@ export default function ProductActions({
       }
     }
     fetchSettings()
-  }, [])
+  }, [giftWrapSettingsProp])
 
   const wishlist = useOptionalWishlist()
   const [isQuestionOpen, setIsQuestionOpen] = useState(false)

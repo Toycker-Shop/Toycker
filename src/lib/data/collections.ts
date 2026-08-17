@@ -4,8 +4,7 @@ import { unstable_cache } from "next/cache"
 import { createPublicClient } from "@/lib/supabase/public-server"
 import { Collection } from "@/lib/supabase/types"
 
-// Cache TTL: 10 minutes in seconds
-const COLLECTIONS_CACHE_TTL = 86400
+const COLLECTIONS_CACHE_TTL = 600
 
 // Internal function for listCollections
 const listCollectionsInternal = async (page: number = 1, limit: number = 20) => {
@@ -29,7 +28,7 @@ const listCollectionsInternal = async (page: number = 1, limit: number = 20) => 
 export const listCollections = unstable_cache(
   listCollectionsInternal,
   ["collections", "list"],
-  { revalidate: COLLECTIONS_CACHE_TTL, tags: ["collections"] }
+  { revalidate: COLLECTIONS_CACHE_TTL, tags: ["collections", "storefront-catalog"] }
 )
 
 // Internal function for getCollectionByHandle
@@ -52,5 +51,5 @@ const getCollectionByHandleInternal = async (handle: string) => {
 export const getCollectionByHandle = unstable_cache(
   getCollectionByHandleInternal,
   ["collections", "handle"],
-  { revalidate: COLLECTIONS_CACHE_TTL, tags: ["collections"] }
+  { revalidate: COLLECTIONS_CACHE_TTL, tags: ["collections", "storefront-catalog"] }
 )
