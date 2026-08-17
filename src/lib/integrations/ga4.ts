@@ -10,14 +10,13 @@ const GA4_PROVIDER = "google_analytics"
 const GA4_EVENT_NAME = "purchase"
 const GA4_PURCHASE_SENT_MARKER = "ga4_purchase_sent_at"
 
-const CONFIRMED_ORDER_STATUSES = new Set<Order["status"]>([
-  "order_placed",
-  "accepted",
-  "shipped",
-  "delivered",
-])
-
 const INVALID_PAYMENT_STATUSES = new Set(["failed", "cancelled"])
+const GA4_BACKDATE_WINDOW_MS = 72 * 60 * 60 * 1000
+
+export type Ga4PurchaseConfirmation =
+  | "full_payment"
+  | "partial_payment"
+  | "cash_on_delivery"
 
 type Ga4Item = {
   item_id: string
@@ -41,6 +40,7 @@ type Ga4PurchasePayload = {
   events: Array<{
     name: typeof GA4_EVENT_NAME
     params: Ga4PurchaseParameters
+    timestamp_micros?: number
   }>
 }
 
@@ -64,7 +64,10 @@ const getOrderMarketingValue = (
   return typeof value === "string" && value.trim() ? value.trim() : null
 }
 
-const isEligibleOrder = (order: Order): boolean => {
+const isEligibleOrder = (
+  order: Order,
+  confirmation: Ga4PurchaseConfirmation,
+): boolean => {
   const paymentStatus = order.payment_status.trim().toLowerCase()
 
   if (
@@ -74,12 +77,25 @@ const isEligibleOrder = (order: Order): boolean => {
   ) {
     return false
   }
+  if (order.status !== "pending" && order.status !== "order_placed") {
+    return false
+  }
 
-  if (CONFIRMED_ORDER_STATUSES.has(order.status)) return true
 
-  // The existing customer order state treats successful COD/manual checkout
-  // as confirmed even while the order is waiting for Admin acceptance.
-  return order.status === "pending" && isCashOnDeliveryLikeOrder(order)
+  if (confirmation === "partial_payment") {
+    return paymentStatus === "partially_paid"
+  }
+
+  if (confirmation === "full_payment") {
+    return paymentStatus === "captured" || paymentStatus === "paid"
+  }
+
+  // COD/manual checkout is confirmed at checkout even while the order is
+  // waiting for Admin acceptance.
+  return (
+    (order.status === "pending" || order.status === "order_placed") &&
+    isCashOnDeliveryLikeOrder(order)
+  )
 }
 
 const getOrderItems = (order: Order): Ga4Item[] => {
@@ -138,6 +154,16 @@ const getMeasurementId = async (): Promise<string | null> => {
 const hasPurchaseBeenSent = (order: Order): boolean =>
   isRecord(order.metadata) && typeof order.metadata[GA4_PURCHASE_SENT_MARKER] === "string"
 
+const getEventTimestampMicros = (createdAt: string): number | undefined => {
+  const createdAtMs = Date.parse(createdAt)
+  if (!Number.isFinite(createdAtMs)) return undefined
+
+  const ageMs = Date.now() - createdAtMs
+  if (ageMs < 0 || ageMs > GA4_BACKDATE_WINDOW_MS) return undefined
+
+  return createdAtMs * 1000
+}
+
 const markPurchaseAsSent = async (order: Order): Promise<void> => {
   const metadata = isRecord(order.metadata) ? order.metadata : {}
   const supabase = await createAdminClient()
@@ -180,14 +206,26 @@ const buildPurchasePayload = (order: Order): Ga4PurchasePayload | null => {
   if (Number.isFinite(shipping) && shipping >= 0) params.shipping = shipping
   if (Number.isFinite(tax) && tax >= 0) params.tax = tax
 
+  const eventTimestampMicros = getEventTimestampMicros(order.created_at)
+  const purchaseEvent: Ga4PurchasePayload["events"][number] = {
+    name: GA4_EVENT_NAME,
+    params,
+    ...(eventTimestampMicros === undefined
+      ? {}
+      : { timestamp_micros: eventTimestampMicros }),
+  }
+
   return {
     client_id: getClientId(order),
-    events: [{ name: GA4_EVENT_NAME, params }],
+    events: [purchaseEvent],
   }
 }
 
-export async function sendGa4PurchaseEvent(order: Order): Promise<void> {
-  if (!isEligibleOrder(order) || hasPurchaseBeenSent(order)) return
+export async function sendGa4PurchaseEvent(
+  order: Order,
+  confirmation: Ga4PurchaseConfirmation,
+): Promise<void> {
+  if (!isEligibleOrder(order, confirmation) || hasPurchaseBeenSent(order)) return
 
   const apiSecret = process.env.GA4_API_SECRET?.trim()
   const measurementId = await getMeasurementId()
@@ -237,7 +275,10 @@ export async function sendGa4PurchaseEvent(order: Order): Promise<void> {
   }
 }
 
-export async function sendGa4PurchaseEventForOrderId(orderId: string): Promise<void> {
+export async function sendGa4PurchaseEventForOrderId(
+  orderId: string,
+  confirmation: Ga4PurchaseConfirmation,
+): Promise<void> {
   const supabase = await createAdminClient()
   const { data, error } = await supabase
     .from("orders")
@@ -250,5 +291,5 @@ export async function sendGa4PurchaseEventForOrderId(orderId: string): Promise<v
     return
   }
 
-  if (data) await sendGa4PurchaseEvent(data as Order)
+  if (data) await sendGa4PurchaseEvent(data as Order, confirmation)
 }

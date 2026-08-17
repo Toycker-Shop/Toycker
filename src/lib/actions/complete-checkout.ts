@@ -387,7 +387,7 @@ export async function completeCheckout(
           checkoutData.rewardsToApply
         )
       }
-      await sendGa4PurchaseEventForOrderId(result.order_id)
+      await sendGa4PurchaseEventForOrderId(result.order_id, "cash_on_delivery")
       await sendMetaPurchaseEvent(orderData as unknown as Order)
     }
 
