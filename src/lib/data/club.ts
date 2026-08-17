@@ -1,7 +1,7 @@
 "use server"
 
 import { cache } from "react"
-import { revalidateTag, unstable_cache } from "next/cache"
+import { revalidateTag, updateTag, unstable_cache } from "next/cache"
 
 import { createAdminClient } from "@/lib/supabase/admin"
 import { createClient } from "@/lib/supabase/server"
@@ -75,7 +75,7 @@ const getClubSettingsInternal = async (): Promise<ClubSettings> => {
 
 export const getClubSettings = cache(async () => {
   return await unstable_cache(getClubSettingsInternal, ["club-settings"], {
-    revalidate: 3600,
+    revalidate: 600,
     tags: ["club_settings"],
   })()
 })
@@ -95,8 +95,9 @@ export async function updateClubSettings(settings: Partial<ClubSettings>) {
     throw new Error(`Failed to update settings: ${error.message}`)
   }
 
-  revalidateTag("club_settings", "max")
-  revalidateTag("products", "max")
+  updateTag("club_settings")
+  updateTag("products")
+  updateTag("storefront-catalog")
 }
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>

@@ -2,13 +2,8 @@ import {
   getStorefrontPriceBounds,
   listPaginatedProducts,
 } from "@lib/data/products"
+import { Suspense } from "react"
 import { Collection } from "@/lib/supabase/types"
-import {
-  AvailabilityFilter,
-  PriceRangeFilter,
-  SortOptions,
-  ViewMode,
-} from "@modules/store/components/refinement-list/types"
 import ProductGridSection from "@modules/store/components/product-grid-section"
 import { StorefrontFiltersProvider } from "@modules/store/context/storefront-filters"
 import { STORE_PRODUCT_PAGE_SIZE } from "@modules/store/constants"
@@ -16,45 +11,28 @@ import FilterDrawer from "@modules/store/components/filter-drawer"
 import Breadcrumbs from "@modules/common/components/breadcrumbs"
 
 export default async function CollectionTemplate({
-  sortBy,
   collection,
-  availability,
-  priceRange,
-  page,
-  viewMode,
   countryCode,
   clubDiscountPercentage,
 }: {
-  sortBy?: SortOptions
   collection: Collection
-  availability?: AvailabilityFilter
-  priceRange?: PriceRangeFilter
-  page?: string
-  viewMode?: ViewMode
   countryCode: string
   clubDiscountPercentage?: number
 }) {
-  const pageNumber = page ? parseInt(page) : 1
-  const sort = sortBy || "featured"
-  const resolvedViewMode = viewMode || "grid-4"
-
   const queryParams = {
     collection_id: [collection.id],
   }
 
   const [productListing, initialPriceBounds] = await Promise.all([
     listPaginatedProducts({
-      page: pageNumber,
+      page: 1,
       limit: STORE_PRODUCT_PAGE_SIZE,
-      sortBy: sort,
+      sortBy: "featured",
       countryCode,
-      availability,
-      priceFilter: priceRange,
       queryParams,
     }),
     getStorefrontPriceBounds({
       countryCode,
-      availability,
       queryParams,
     }),
   ])
@@ -68,51 +46,43 @@ export default async function CollectionTemplate({
   ]
 
   return (
-    <StorefrontFiltersProvider
-      countryCode={countryCode}
-      initialFilters={{
-        availability,
-        priceRange,
-        sortBy: sort,
-        page: pageNumber,
-        viewMode: resolvedViewMode,
-      }}
-      initialProducts={initialProducts}
-      initialCount={initialCount}
-      initialPriceBounds={initialPriceBounds}
-      pageSize={STORE_PRODUCT_PAGE_SIZE}
-      fixedCollectionId={collection.id}
-    >
-      <FilterDrawer
-        selectedFilters={{
-          availability,
-          priceMin: priceRange?.min,
-          priceMax: priceRange?.max,
-        }}
-        filterOptions={{ availability: availabilityOptions }}
+    <Suspense fallback={null}>
+      <StorefrontFiltersProvider
+        countryCode={countryCode}
+        initialFilters={{ sortBy: "featured", page: 1, viewMode: "grid-4" }}
+        initialProducts={initialProducts}
+        initialCount={initialCount}
+        initialPriceBounds={initialPriceBounds}
+        pageSize={STORE_PRODUCT_PAGE_SIZE}
+        fixedCollectionId={collection.id}
       >
-        <div className="mx-auto p-4 max-w-[1440px] pb-10 w-full">
-          <Breadcrumbs
-            className="mb-6 hidden small:block"
-            items={[
-              { label: "Store", href: "/store" },
-              { label: "Collections", href: "/collections" },
-              { label: collection.title },
-            ]}
-          />
-          <h1 className="mb-4 text-3xl font-semibold">{collection.title}</h1>
-          <ProductGridSection
-            title={collection.title}
-            products={initialProducts}
-            totalCount={initialCount}
-            page={pageNumber}
-            viewMode={resolvedViewMode}
-            sortBy={sort}
-            pageSize={STORE_PRODUCT_PAGE_SIZE}
-            clubDiscountPercentage={clubDiscountPercentage}
-          />
-        </div>
-      </FilterDrawer>
-    </StorefrontFiltersProvider>
+        <FilterDrawer
+          selectedFilters={{}}
+          filterOptions={{ availability: availabilityOptions }}
+        >
+          <div className="mx-auto p-4 max-w-[1440px] pb-10 w-full">
+            <Breadcrumbs
+              className="mb-6 hidden small:block"
+              items={[
+                { label: "Store", href: "/store" },
+                { label: "Collections", href: "/collections" },
+                { label: collection.title },
+              ]}
+            />
+            <h1 className="mb-4 text-3xl font-semibold">{collection.title}</h1>
+            <ProductGridSection
+              title={collection.title}
+              products={initialProducts}
+              totalCount={initialCount}
+              page={1}
+              viewMode="grid-4"
+              sortBy="featured"
+              pageSize={STORE_PRODUCT_PAGE_SIZE}
+              clubDiscountPercentage={clubDiscountPercentage}
+            />
+          </div>
+        </FilterDrawer>
+      </StorefrontFiltersProvider>
+    </Suspense>
   )
 }

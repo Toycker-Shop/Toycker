@@ -22,9 +22,15 @@ import {
   PriceRangeFilter,
   SortOptions,
   ViewMode,
+  isViewMode,
 } from "@modules/store/components/refinement-list/types"
 import { STORE_PRODUCT_PAGE_SIZE } from "@modules/store/constants"
 import { resolveAgeFilterValue } from "@modules/store/utils/age-filter"
+import { sanitizePriceRange } from "@modules/store/utils/price-range"
+import {
+  MIN_SEARCH_QUERY_LENGTH,
+  SEARCH_MAX_QUERY_LENGTH,
+} from "@/lib/constants/search"
 
 type FilterState = {
   availability?: AvailabilityFilter
@@ -114,6 +120,74 @@ const isFilterStateEqual = (a: FilterState, b: FilterState) =>
   a.searchQuery === b.searchQuery &&
   a.viewMode === b.viewMode
 
+const isSortOption = (value: string | null): value is SortOptions =>
+  value === "featured" ||
+  value === "best_selling" ||
+  value === "alpha_asc" ||
+  value === "alpha_desc" ||
+  value === "price_asc" ||
+  value === "price_desc" ||
+  value === "date_old_new" ||
+  value === "date_new_old"
+
+const isAvailabilityFilter = (value: string | null): value is AvailabilityFilter =>
+  value === "in_stock" || value === "out_of_stock"
+
+const parseSearchQuery = (value: string | null) => {
+  const normalized = value?.trim().slice(0, SEARCH_MAX_QUERY_LENGTH)
+
+  return normalized && normalized.length >= MIN_SEARCH_QUERY_LENGTH
+    ? normalized
+    : undefined
+}
+
+const parsePage = (value: string | null) => {
+  const parsed = Number.parseInt(value ?? "", 10)
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : 1
+}
+
+const parsePrice = (value: string | null) => {
+  if (!value) return undefined
+
+  const parsed = Number(value)
+  return Number.isFinite(parsed) ? parsed : undefined
+}
+
+const getFiltersFromSearchParams = (
+  baseFilters: FilterState,
+  searchParams: { get: (_name: string) => string | null },
+  fixedCategoryId?: string,
+  fixedCollectionId?: string,
+): FilterState => {
+  const availabilityValue = searchParams.get("availability")
+  const sortValue = searchParams.get("sortBy")
+  const viewValue = searchParams.get("view")
+  const next: FilterState = {
+    ...baseFilters,
+    availability: isAvailabilityFilter(availabilityValue)
+      ? availabilityValue
+      : undefined,
+    priceRange: sanitizePriceRange({
+      min: parsePrice(searchParams.get("price_min")),
+      max: parsePrice(searchParams.get("price_max")),
+    }),
+    age: searchParams.get("age") ?? undefined,
+    sortBy: isSortOption(sortValue) ? sortValue : "featured",
+    page: parsePage(searchParams.get("page")),
+    searchQuery: parseSearchQuery(searchParams.get("q")),
+    viewMode: isViewMode(viewValue) ? viewValue : "grid-4",
+    collectionId: fixedCollectionId
+      ? undefined
+      : searchParams.get("collection") ?? undefined,
+  }
+
+  if (fixedCategoryId) {
+    next.categoryId = undefined
+  }
+
+  return next
+}
+
 export const StorefrontFiltersProvider = ({
   children,
   countryCode,
@@ -125,8 +199,20 @@ export const StorefrontFiltersProvider = ({
   fixedCategoryId,
   fixedCollectionId,
 }: StorefrontFiltersProviderProps) => {
-  const [filters, setFilterState] = useState<FilterState>(initialFilters)
-  const filtersRef = useRef(initialFilters)
+  const router = useRouter()
+  const pathname = usePathname()
+  const searchParams = useSearchParams()
+  const initialSearchParamsRef = useRef(searchParams)
+  const initialFixedCategoryIdRef = useRef(fixedCategoryId)
+  const initialFixedCollectionIdRef = useRef(fixedCollectionId)
+  const initialClientFilters = getFiltersFromSearchParams(
+    initialFilters,
+    initialSearchParamsRef.current,
+    initialFixedCategoryIdRef.current,
+    initialFixedCollectionIdRef.current,
+  )
+  const [filters, setFilterState] = useState<FilterState>(initialClientFilters)
+  const filtersRef = useRef(initialClientFilters)
   const [listing, setListing] = useState<{ products: Product[]; count: number }>(() => ({
     products: dedupeProducts(initialProducts),
     count: initialCount,
@@ -137,15 +223,18 @@ export const StorefrontFiltersProvider = ({
   const [isPending, startTransition] = useTransition()
   const abortControllerRef = useRef<AbortController | null>(null)
 
-  const router = useRouter()
-  const pathname = usePathname()
-  const searchParams = useSearchParams()
-
   useEffect(() => () => abortControllerRef.current?.abort(), [])
 
   useEffect(() => {
-    filtersRef.current = initialFilters
-    setFilterState(initialFilters)
+    const nextInitialFilters = getFiltersFromSearchParams(
+      initialFilters,
+      initialSearchParamsRef.current,
+      initialFixedCategoryIdRef.current,
+      initialFixedCollectionIdRef.current,
+    )
+
+    filtersRef.current = nextInitialFilters
+    setFilterState(nextInitialFilters)
     setListing({ products: dedupeProducts(initialProducts), count: initialCount })
     setPriceBounds(initialPriceBounds)
     setError(undefined)
@@ -260,6 +349,32 @@ export const StorefrontFiltersProvider = ({
     },
     [fetchProducts]
   )
+
+  useEffect(() => {
+    const current = filtersRef.current
+    const next = getFiltersFromSearchParams(
+      current,
+      searchParams,
+      fixedCategoryId,
+      fixedCollectionId,
+    )
+
+    const dataFiltersChanged = !isFilterStateEqual(
+      { ...next, viewMode: current.viewMode },
+      current
+    )
+
+    if (isFilterStateEqual(next, current)) {
+      return
+    }
+
+    filtersRef.current = next
+    setFilterState(next)
+
+    if (dataFiltersChanged) {
+      triggerFetch(next)
+    }
+  }, [fixedCategoryId, fixedCollectionId, searchParams, triggerFetch])
 
   const commitFilters = useCallback(
     (next: FilterState, { shouldFetch = true }: { shouldFetch?: boolean } = {}) => {

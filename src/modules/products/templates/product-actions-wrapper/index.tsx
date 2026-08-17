@@ -13,11 +13,13 @@ export default function ProductActionsWrapper({
   region: _region,
   clubDiscountPercentage,
   reviewStats,
+  giftWrapSettings,
 }: {
   product: Product
   region: Region
   clubDiscountPercentage?: number
   reviewStats?: { average: number; count: number }
+  giftWrapSettings?: { fee: number; enabled: boolean }
 }) {
   return (
     <Suspense
@@ -29,6 +31,7 @@ export default function ProductActionsWrapper({
         product={product}
         clubDiscountPercentage={clubDiscountPercentage}
         reviewStats={reviewStats}
+        giftWrapSettings={giftWrapSettings}
       />
     </Suspense>
   )

@@ -1,11 +1,12 @@
 "use server"
 
 import { createClient } from "@/lib/supabase/server"
+import { createPublicClient } from "@/lib/supabase/public-server"
 import { GlobalSettings } from "@/lib/supabase/types"
-import { revalidateTag, unstable_cache } from "next/cache"
+import { updateTag, unstable_cache } from "next/cache"
 
 const getGlobalSettingsInternal = async (): Promise<GlobalSettings> => {
-    const supabase = await createClient()
+    const supabase = createPublicClient()
 
     const { data, error } = await supabase
         .from("global_settings")
@@ -29,7 +30,7 @@ export const getGlobalSettings = async () =>
     unstable_cache(
         getGlobalSettingsInternal,
         ["global-settings"],
-        { revalidate: 3600, tags: ["global_settings"] }
+        { revalidate: 600, tags: ["global_settings"] }
     )()
 
 export async function updateGlobalSettings(settings: Partial<GlobalSettings>) {
@@ -47,5 +48,5 @@ export async function updateGlobalSettings(settings: Partial<GlobalSettings>) {
         throw new Error(`Failed to update settings: ${error.message}`)
     }
 
-    revalidateTag("global_settings", "max")
+    updateTag("global_settings")
 }

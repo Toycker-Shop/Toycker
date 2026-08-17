@@ -160,10 +160,9 @@ const MainNavigation = ({ navLinks, shopMenuSections, shopMenuPromo }: MainNavig
           <LocalizedClientLink
             key={link.id}
             href={link.href}
-            prefetch
             className={
               isHighlight
-                ? "px-5 py-2 rounded-full bg-gradient-to-r from-purple-400 via-pink-500 to-red-500 text-white font-medium transition-all flex items-center gap-2 flex items-center "
+                ? "px-5 py-2 rounded-full bg-gradient-to-r from-purple-400 via-pink-500 to-red-500 text-white font-medium transition-all flex items-center gap-2  "
                 : `font-medium transition-colors py-4 ${active ? "text-primary" : "text-black hover:text-primary"}`
             }
             onClick={closeDropdown}

@@ -82,7 +82,7 @@ export default async function AdminLayout({
         <aside className="hidden lg:flex bg-white border-r border-gray-200 flex-col sticky top-0 h-screen overflow-hidden">
           {/* Logo Section */}
           <div className="h-16 flex items-center px-6 border-b border-gray-200 shrink-0">
-            <Link href="/admin" className="flex items-center gap-3 group">
+            <Link href="/admin" prefetch={false} className="flex items-center gap-3 group">
               <div className="h-9 w-9 rounded-lg flex items-center justify-center overflow-hidden transition-all bg-primary p-1">
                 <Image
                   src="/icon-512x512.png"
@@ -122,6 +122,7 @@ export default async function AdminLayout({
           <div className="p-3 border-t border-gray-200 space-y-1 shrink-0">
             <Link
               href="/"
+              prefetch={false}
               target="_blank"
               rel="noopener noreferrer"
               className="group flex items-center gap-3 px-3 py-2.5 text-sm font-medium text-gray-600 rounded-lg hover:bg-gray-100 hover:text-gray-900 transition-all"
@@ -158,6 +159,7 @@ export default async function AdminLayout({
                 {/* Mobile Logo */}
                 <Link
                   href="/admin"
+                  prefetch={false}
                   className="lg:hidden flex items-center gap-2"
                 >
                   <div className="h-8 w-8 rounded-lg flex items-center justify-center overflow-hidden">

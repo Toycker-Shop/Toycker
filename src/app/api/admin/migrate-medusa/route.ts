@@ -6,7 +6,7 @@
 
 import { NextRequest, NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
-import { revalidatePath } from "next/cache"
+import { revalidatePath, revalidateTag } from "next/cache"
 import {
     createMedusaClient,
     getVariantPrice,
@@ -272,6 +272,7 @@ export async function POST(request: NextRequest) {
         revalidatePath("/admin/categories")
         revalidatePath("/store")
         revalidatePath("/")
+        revalidateTag("storefront-catalog", "max")
 
         console.log("[Migration] Complete!", stats)
 

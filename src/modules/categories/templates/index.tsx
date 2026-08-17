@@ -4,14 +4,9 @@ import {
   getStorefrontPriceBounds,
   listPaginatedProducts,
 } from "@lib/data/products"
+import { Suspense } from "react"
 import { Category } from "@/lib/supabase/types"
 import InteractiveLink from "@modules/common/components/interactive-link"
-import {
-  AvailabilityFilter,
-  PriceRangeFilter,
-  SortOptions,
-  ViewMode,
-} from "@modules/store/components/refinement-list/types"
 import ProductGridSection from "@modules/store/components/product-grid-section"
 import { StorefrontFiltersProvider } from "@modules/store/context/storefront-filters"
 import { STORE_PRODUCT_PAGE_SIZE } from "@modules/store/constants"
@@ -20,28 +15,14 @@ import Breadcrumbs from "@modules/common/components/breadcrumbs"
 
 export default async function CategoryTemplate({
   category,
-  availability,
-  priceRange,
-  sortBy,
-  page,
-  viewMode,
   countryCode,
   clubDiscountPercentage,
 }: {
   category: Category
-  availability?: AvailabilityFilter
-  priceRange?: PriceRangeFilter
-  sortBy?: SortOptions
-  page?: string
-  viewMode?: ViewMode
   countryCode: string
   clubDiscountPercentage?: number
 }) {
   if (!category || !countryCode) notFound()
-
-  const pageNumber = page ? parseInt(page) : 1
-  const sort = sortBy || "featured"
-  const resolvedViewMode = viewMode || "grid-4"
 
   const queryParams = {
     category_id: [category.id],
@@ -49,17 +30,14 @@ export default async function CategoryTemplate({
 
   const [productListing, initialPriceBounds] = await Promise.all([
     listPaginatedProducts({
-      page: pageNumber,
+      page: 1,
       limit: STORE_PRODUCT_PAGE_SIZE,
-      sortBy: sort,
+      sortBy: "featured",
       countryCode,
-      availability,
-      priceFilter: priceRange,
       queryParams,
     }),
     getStorefrontPriceBounds({
       countryCode,
-      availability,
       queryParams,
     }),
   ])
@@ -92,28 +70,19 @@ export default async function CategoryTemplate({
   ]
 
   return (
-    <StorefrontFiltersProvider
-      countryCode={countryCode}
-      initialFilters={{
-        availability,
-        priceRange,
-        sortBy: sort,
-        page: pageNumber,
-        viewMode: resolvedViewMode,
-      }}
+    <Suspense fallback={null}>
+      <StorefrontFiltersProvider
+        countryCode={countryCode}
+        initialFilters={{ sortBy: "featured", page: 1, viewMode: "grid-4" }}
       initialProducts={initialProducts}
       initialCount={initialCount}
       initialPriceBounds={initialPriceBounds}
       pageSize={STORE_PRODUCT_PAGE_SIZE}
       fixedCategoryId={category.id}
     >
-      <FilterDrawer
-        selectedFilters={{
-          availability,
-          priceMin: priceRange?.min,
-          priceMax: priceRange?.max,
-        }}
-        filterOptions={{ availability: availabilityOptions }}
+        <FilterDrawer
+          selectedFilters={{}}
+          filterOptions={{ availability: availabilityOptions }}
       >
         <div className="mx-auto p-4 max-w-[1440px] pb-10 w-full" data-testid="category-container">
           <Breadcrumbs items={breadcrumbItems} className="mb-6 hidden small:block" />
@@ -136,18 +105,19 @@ export default async function CategoryTemplate({
               </ul>
             </div>
           )}
-          <ProductGridSection
-            title={category.name}
-            products={initialProducts}
-            totalCount={initialCount}
-            page={pageNumber}
-            viewMode={resolvedViewMode}
-            sortBy={sort}
-            pageSize={STORE_PRODUCT_PAGE_SIZE}
-            clubDiscountPercentage={clubDiscountPercentage}
-          />
+            <ProductGridSection
+              title={category.name}
+              products={initialProducts}
+              totalCount={initialCount}
+              page={1}
+              viewMode="grid-4"
+              sortBy="featured"
+              pageSize={STORE_PRODUCT_PAGE_SIZE}
+              clubDiscountPercentage={clubDiscountPercentage}
+            />
         </div>
       </FilterDrawer>
-    </StorefrontFiltersProvider>
+      </StorefrontFiltersProvider>
+    </Suspense>
   )
 }

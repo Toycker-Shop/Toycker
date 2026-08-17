@@ -72,6 +72,7 @@ function NavItem({ label, href, icon: Icon, pathname, onClick }: NavItemProps) {
   return (
     <Link
       href={href}
+      prefetch={false}
       onClick={onClick}
       className={`group flex items-center gap-3 px-3 py-2.5 text-sm font-medium rounded-lg transition-all ${active
         ? "bg-gray-900 text-white shadow-sm"

@@ -38,6 +38,19 @@ const nextConfig = {
       fullUrl: true,
     },
   },
+  async headers() {
+    return [
+      {
+        source: "/manifest.webmanifest",
+        headers: [
+          {
+            key: "Cache-Control",
+            value: "public, max-age=3600, stale-while-revalidate=86400",
+          },
+        ],
+      },
+    ]
+  },
   images: {
     remotePatterns: [
       {

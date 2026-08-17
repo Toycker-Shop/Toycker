@@ -4,8 +4,7 @@ import { unstable_cache } from "next/cache"
 import { createPublicClient } from "@/lib/supabase/public-server"
 import { Category } from "@/lib/supabase/types"
 
-// Cache TTL: 10 minutes in seconds
-const CATEGORIES_CACHE_TTL = 86400
+const CATEGORIES_CACHE_TTL = 600
 
 type CategoryRow = Omit<Category, "parent_category"> & {
   parent_category?: Category | Category[] | null
@@ -41,7 +40,7 @@ const listCategoriesInternal = async (page: number = 1, limit: number = 20) => {
 export const listCategories = unstable_cache(
   listCategoriesInternal,
   ["categories", "list"],
-  { revalidate: CATEGORIES_CACHE_TTL, tags: ["categories"] }
+  { revalidate: CATEGORIES_CACHE_TTL, tags: ["categories", "storefront-catalog"] }
 )
 
 // Internal function for getCategoryByHandle
@@ -91,5 +90,5 @@ const getCategoryByHandleInternal = async (categoryHandle: string[]): Promise<Ca
 export const getCategoryByHandle = unstable_cache(
   getCategoryByHandleInternal,
   ["categories", "handle"],
-  { revalidate: CATEGORIES_CACHE_TTL, tags: ["categories"] }
+  { revalidate: CATEGORIES_CACHE_TTL, tags: ["categories", "storefront-catalog"] }
 )

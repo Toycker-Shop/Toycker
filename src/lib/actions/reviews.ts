@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server"
 import { PERMISSIONS } from "@/lib/permissions"
 import { checkPermission, requirePermission } from "@/lib/permissions/server"
 import { revalidatePath } from "next/cache"
+import { createPublicClient } from "@/lib/supabase/public-server"
 
 export type ReviewData = {
     product_id: string
@@ -426,7 +427,7 @@ export async function deleteReviews(reviewIds: string[]) {
 }
 
 export async function getProductReviews(productId: string) {
-    const supabase = await createClient()
+    const supabase = createPublicClient()
 
     const { data, error } = await supabase
         .from("reviews")
@@ -459,7 +460,7 @@ export async function getProductReviews(productId: string) {
 }
 
 export async function getProductReviewStats(productId: string) {
-    const supabase = await createClient()
+    const supabase = createPublicClient()
 
     const { data, error } = await supabase
         .from("reviews")
