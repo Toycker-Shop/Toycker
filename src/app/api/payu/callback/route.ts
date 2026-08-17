@@ -346,7 +346,7 @@ export async function POST(request: NextRequest) {
         }
       }
 
-      await sendGa4PurchaseEventForOrderId(finalizedOrderData.id)
+      await sendGa4PurchaseEventForOrderId(finalizedOrderData.id, "full_payment")
       await sendMetaPurchaseEvent(finalizedOrderData)
       console.log("[PAYU] Order processed successfully:", finalizedOrderData.id)
 

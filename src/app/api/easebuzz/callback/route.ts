@@ -455,7 +455,10 @@ export async function POST(request: NextRequest) {
         }
       }
 
-      await sendGa4PurchaseEventForOrderId(finalizedOrderData.id)
+      await sendGa4PurchaseEventForOrderId(
+        finalizedOrderData.id,
+        isPartialPayment ? "partial_payment" : "full_payment",
+      )
       await sendMetaPurchaseEvent(finalizedOrderData)
       console.log(
         "[EASEBUZZ] Order processed successfully:",
