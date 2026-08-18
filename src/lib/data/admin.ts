@@ -2319,7 +2319,8 @@ function getAdminOrderTabFilter(tab: AdminOrderTab): AdminOrderTabFilter {
     case "confirmed":
       return {
         statusValues: ["order_placed", "accepted", "shipped", "delivered"],
-        excludedPaymentValues: '("failed","cancelled")',
+        excludedPaymentValues:
+          '("failed","cancelled","pending","awaiting","unpaid")',
       }
     case "pending":
       return {
@@ -2352,6 +2353,66 @@ type ClubMemberLookupRow = {
 
 function normalizeOrderCustomerEmail(email: string | null | undefined) {
   return email?.trim().toLowerCase() || null
+}
+
+async function fetchAdminOrderCounts(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  search?: string
+): Promise<AdminOrderCounts> {
+  const searchTerm = search?.trim() || ""
+  const searchNum = searchTerm ? parseInt(searchTerm, 10) : NaN
+  const counts: AdminOrderCounts = {
+    all: 0,
+    confirmed: 0,
+    pending: 0,
+    cancelled: 0,
+  }
+
+  const countResults = await Promise.all(
+    ADMIN_ORDER_TAB_VALUES.map(async (countTab) => {
+      const filter = getAdminOrderTabFilter(countTab)
+      let countQuery = supabase
+        .from("orders")
+        .select("*", { count: "exact", head: true })
+
+      if (filter.statusValues) {
+        countQuery = countQuery.in("status", filter.statusValues)
+      }
+      if (filter.orExpression) {
+        countQuery = countQuery.or(filter.orExpression)
+      }
+      if (filter.excludedStatusValues) {
+        countQuery = countQuery.not("status", "in", filter.excludedStatusValues)
+      }
+      if (filter.excludedPaymentValues) {
+        countQuery = countQuery.not("payment_status", "in", filter.excludedPaymentValues)
+      }
+
+      if (!isNaN(searchNum)) {
+        countQuery = countQuery.eq("display_id", searchNum)
+      } else if (searchTerm) {
+        countQuery = countQuery.ilike("customer_email", "%" + searchTerm + "%")
+      }
+
+      const { count, error } = await countQuery
+      if (error) throw error
+      return { tab: countTab, count: count || 0 }
+    })
+  )
+
+  countResults.forEach((result) => {
+    counts[result.tab] = result.count
+  })
+
+  return counts
+}
+
+export async function getAdminOrderCounts(
+  search?: string
+): Promise<AdminOrderCounts> {
+  await ensureAdmin()
+  const supabase = await createClient()
+  return fetchAdminOrderCounts(supabase, search)
 }
 
 async function attachOrderCustomerFlags(
@@ -2515,48 +2576,7 @@ export async function getAdminOrders(
   const searchTerm = search?.trim() || ""
   const searchNum = searchTerm ? parseInt(searchTerm, 10) : NaN
 
-  const counts: AdminOrderCounts = {
-    all: 0,
-    confirmed: 0,
-    pending: 0,
-    cancelled: 0,
-  }
-
-  const countResults = await Promise.all(
-    ADMIN_ORDER_TAB_VALUES.map(async (countTab) => {
-      const filter = getAdminOrderTabFilter(countTab)
-      let countQuery = supabase
-        .from("orders")
-        .select("*", { count: "exact", head: true })
-
-      if (filter.statusValues) {
-        countQuery = countQuery.in("status", filter.statusValues)
-      }
-      if (filter.orExpression) {
-        countQuery = countQuery.or(filter.orExpression)
-      }
-      if (filter.excludedStatusValues) {
-        countQuery = countQuery.not("status", "in", filter.excludedStatusValues)
-      }
-      if (filter.excludedPaymentValues) {
-        countQuery = countQuery.not("payment_status", "in", filter.excludedPaymentValues)
-      }
-
-      if (!isNaN(searchNum)) {
-        countQuery = countQuery.eq("display_id", searchNum)
-      } else if (searchTerm) {
-        countQuery = countQuery.ilike("customer_email", "%" + searchTerm + "%")
-      }
-
-      const { count, error } = await countQuery
-      if (error) throw error
-      return { tab: countTab, count: count || 0 }
-    })
-  )
-
-  countResults.forEach((result) => {
-    counts[result.tab] = result.count
-  })
+  const counts = await fetchAdminOrderCounts(supabase, searchTerm)
 
   const activeFilter = getAdminOrderTabFilter(tab)
   const count = counts[tab]
@@ -2602,6 +2622,30 @@ export async function getAdminOrders(
     currentPage: page,
     counts,
   }
+}
+
+export async function getAdminOrderListItemById(
+  id: string
+): Promise<AdminOrderListItem | null> {
+  await ensureAdmin()
+
+  const supabase = await createClient()
+  const { data, error } = await supabase
+    .from('orders')
+    .select(ADMIN_ORDER_LIST_SELECT)
+    .eq('id', id)
+    .maybeSingle<AdminOrderListRow>()
+
+  if (error) {
+    throw error
+  }
+
+  if (!data) {
+    return null
+  }
+
+  const [order] = await attachOrderCustomerFlags(supabase, [data])
+  return order ?? null
 }
 
 export async function getRecentAdminOrders(
