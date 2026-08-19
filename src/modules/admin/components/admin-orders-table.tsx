@@ -93,13 +93,16 @@ function matchesOrderSearch(order: AdminOrderListItem, search: string) {
     return true
   }
 
-  const searchNumber = parseInt(searchTerm, 10)
+  const normalizedSearchTerm = searchTerm.toLowerCase()
+  const matchesOrderId = /^\d+$/.test(searchTerm)
+    ? order.display_id === Number(searchTerm)
+    : false
+  const matchesCustomerName =
+    order.customer_name?.toLowerCase().includes(normalizedSearchTerm) ?? false
+  const matchesCustomerPhone =
+    order.customer_phone?.toLowerCase().includes(normalizedSearchTerm) ?? false
 
-  if (!Number.isNaN(searchNumber)) {
-    return order.display_id === searchNumber
-  }
-
-  return order.customer_email.toLowerCase().includes(searchTerm.toLowerCase())
+  return matchesOrderId || matchesCustomerName || matchesCustomerPhone
 }
 
 function compareAdminOrders(
@@ -221,7 +224,14 @@ function OrderTableRow({
       </td>
       <td className='px-6 py-4 whitespace-nowrap'>
         <div className='flex items-center gap-2'>
-          <span className='text-sm text-gray-600'>{order.customer_email}</span>
+          <div className='flex min-w-0 flex-col'>
+            <span className='text-sm text-gray-600'>
+              {order.customer_name || 'No name'}
+            </span>
+            <span className='text-xs text-gray-400'>
+              {order.customer_phone || 'No phone'}
+            </span>
+          </div>
           {order.is_repeat_customer ? (
             <AdminBadge variant='info'>Repeat</AdminBadge>
           ) : null}
