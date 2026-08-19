@@ -171,6 +171,8 @@ export type AdminOrderListItem = Pick<
   | "currency_code"
   | "status"
 > & {
+  customer_name?: string | null
+  customer_phone?: string | null
   is_repeat_customer: boolean
   is_club_member: boolean
 }
@@ -178,10 +180,13 @@ export type AdminOrderListItem = Pick<
 type AdminOrderListRow = Omit<
   AdminOrderListItem,
   "is_repeat_customer" | "is_club_member"
->
+> & {
+  shipping_address: Order["shipping_address"]
+  billing_address: Order["billing_address"]
+}
 
 const ADMIN_ORDER_LIST_SELECT =
-  "id, user_id, display_id, created_at, customer_email, payment_status, payment_method, payu_txn_id, gateway_txn_id, fulfillment_status, total_amount, currency_code, status"
+  "id, user_id, display_id, created_at, customer_email, shipping_address, billing_address, payment_status, payment_method, payu_txn_id, gateway_txn_id, fulfillment_status, total_amount, currency_code, status"
 
 type OrderAddressActionState = {
   success: boolean
@@ -2355,12 +2360,68 @@ function normalizeOrderCustomerEmail(email: string | null | undefined) {
   return email?.trim().toLowerCase() || null
 }
 
+function getFirstNonEmptyValue(
+  values: Array<string | null | undefined>
+): string | null {
+  for (const value of values) {
+    const trimmedValue = value?.trim()
+    if (trimmedValue) {
+      return trimmedValue
+    }
+  }
+
+  return null
+}
+
+function getOrderCustomerContact(
+  row: Pick<AdminOrderListRow, "shipping_address" | "billing_address">
+) {
+  const addresses = [row.shipping_address, row.billing_address]
+  const firstName = getFirstNonEmptyValue(
+    addresses.map((address) => address?.first_name)
+  )
+  const lastName = getFirstNonEmptyValue(
+    addresses.map((address) => address?.last_name)
+  )
+
+  return {
+    customer_name: [firstName, lastName].filter(Boolean).join(" ") || null,
+    customer_phone: getFirstNonEmptyValue(
+      addresses.map((address) => address?.phone)
+    ),
+  }
+}
+
+function getAdminOrderSearchExpression(search?: string): string | null {
+  const searchTerm = search?.trim() || ""
+  if (!searchTerm) {
+    return null
+  }
+
+  const safeSearchTerm = searchTerm.replace(/[(),]/g, " ")
+  const searchPattern = `%${safeSearchTerm}%`
+  const searchParts = [
+    `shipping_address->>first_name.ilike.${searchPattern}`,
+    `shipping_address->>last_name.ilike.${searchPattern}`,
+    `shipping_address->>phone.ilike.${searchPattern}`,
+    `billing_address->>first_name.ilike.${searchPattern}`,
+    `billing_address->>last_name.ilike.${searchPattern}`,
+    `billing_address->>phone.ilike.${searchPattern}`,
+  ]
+
+  if (/^\d+$/.test(searchTerm)) {
+    searchParts.unshift(`display_id.eq.${searchTerm}`)
+  }
+
+  return searchParts.join(",")
+}
+
 async function fetchAdminOrderCounts(
   supabase: Awaited<ReturnType<typeof createClient>>,
   search?: string
 ): Promise<AdminOrderCounts> {
   const searchTerm = search?.trim() || ""
-  const searchNum = searchTerm ? parseInt(searchTerm, 10) : NaN
+  const searchExpression = getAdminOrderSearchExpression(searchTerm)
   const counts: AdminOrderCounts = {
     all: 0,
     confirmed: 0,
@@ -2388,10 +2449,8 @@ async function fetchAdminOrderCounts(
         countQuery = countQuery.not("payment_status", "in", filter.excludedPaymentValues)
       }
 
-      if (!isNaN(searchNum)) {
-        countQuery = countQuery.eq("display_id", searchNum)
-      } else if (searchTerm) {
-        countQuery = countQuery.ilike("customer_email", "%" + searchTerm + "%")
+      if (searchExpression) {
+        countQuery = countQuery.or(searchExpression)
       }
 
       const { count, error } = await countQuery
@@ -2555,6 +2614,7 @@ async function attachOrderCustomerFlags(
 
     return {
       ...row,
+      ...getOrderCustomerContact(row),
       is_club_member: isClubMember,
       is_repeat_customer: customerRows.some(
         (customerRow) =>
@@ -2574,7 +2634,7 @@ export async function getAdminOrders(
   const { page = 1, limit = 20, search, tab = "all" } = params
   const supabase = await createClient()
   const searchTerm = search?.trim() || ""
-  const searchNum = searchTerm ? parseInt(searchTerm, 10) : NaN
+  const searchExpression = getAdminOrderSearchExpression(searchTerm)
 
   const counts = await fetchAdminOrderCounts(supabase, searchTerm)
 
@@ -2600,10 +2660,8 @@ export async function getAdminOrders(
     query = query.not("payment_status", "in", activeFilter.excludedPaymentValues)
   }
 
-  if (!isNaN(searchNum)) {
-    query = query.eq("display_id", searchNum)
-  } else if (searchTerm) {
-    query = query.ilike("customer_email", "%" + searchTerm + "%")
+  if (searchExpression) {
+    query = query.or(searchExpression)
   }
 
   const offset = (page - 1) * limit

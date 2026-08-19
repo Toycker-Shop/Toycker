@@ -80,7 +80,7 @@ export default async function AdminOrders({
       <AdminSearchInput
         defaultValue={search}
         basePath='/admin/orders'
-        placeholder='Search orders by order ID or customer email...'
+        placeholder='Search by order ID, customer name, or phone...'
       />
 
 
