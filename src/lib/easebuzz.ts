@@ -1,4 +1,4 @@
-import crypto from "crypto"
+import crypto, { timingSafeEqual } from "crypto"
 
 export interface EasebuzzHashParams {
   key: string
@@ -158,7 +158,13 @@ export const verifyEasebuzzHash = (
     )
   }
 
-  if (computed === receivedHash) {
+  const computedBuffer = Buffer.from(computed, "utf8")
+  const receivedBuffer = Buffer.from(receivedHash, "utf8")
+  const hashesMatch =
+    computedBuffer.length === receivedBuffer.length &&
+    timingSafeEqual(computedBuffer, receivedBuffer)
+
+  if (hashesMatch) {
     if (process.env.NODE_ENV === "development") {
       console.log("[EASEBUZZ] Hash verification: PASSED")
     }
@@ -168,3 +174,19 @@ export const verifyEasebuzzHash = (
   console.log("[EASEBUZZ] Hash verification: FAILED")
   return false
 }
+
+export const verifyEasebuzzMerchantKey = (
+  payload: EasebuzzCallbackPayload,
+  merchantKey: string
+): boolean => {
+  const receivedKey = String(payload.key || "")
+  const expectedKey = merchantKey.trim()
+  const receivedBuffer = Buffer.from(receivedKey, "utf8")
+  const expectedBuffer = Buffer.from(expectedKey, "utf8")
+
+  return (
+    receivedBuffer.length === expectedBuffer.length &&
+    timingSafeEqual(receivedBuffer, expectedBuffer)
+  )
+}
+

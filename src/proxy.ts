@@ -118,7 +118,8 @@ export async function proxy(request: NextRequest) {
   // CRITICAL: Bypass middleware for payment gateway callbacks to prevent auth errors on POST requests
   if (
     request.nextUrl.pathname.startsWith('/api/payu/callback') ||
-    request.nextUrl.pathname.startsWith('/api/easebuzz/callback')
+    request.nextUrl.pathname.startsWith('/api/easebuzz/callback') ||
+    request.nextUrl.pathname.startsWith('/api/easebuzz/webhook')
   ) {
     return NextResponse.next()
   }
