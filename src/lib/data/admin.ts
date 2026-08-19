@@ -2585,6 +2585,7 @@ export async function getAdminOrders(
     .from("orders")
     .select(ADMIN_ORDER_LIST_SELECT)
     .order("created_at", { ascending: false })
+    .order("display_id", { ascending: false })
 
   if (activeFilter.statusValues) {
     query = query.in("status", activeFilter.statusValues)
