@@ -102,6 +102,27 @@ function matchesOrderSearch(order: AdminOrderListItem, search: string) {
   return order.customer_email.toLowerCase().includes(searchTerm.toLowerCase())
 }
 
+function compareAdminOrders(
+  firstOrder: AdminOrderListItem,
+  secondOrder: AdminOrderListItem
+) {
+  const firstCreatedAt = Date.parse(firstOrder.created_at)
+  const secondCreatedAt = Date.parse(secondOrder.created_at)
+  const firstTimestamp = Number.isNaN(firstCreatedAt) ? 0 : firstCreatedAt
+  const secondTimestamp = Number.isNaN(secondCreatedAt) ? 0 : secondCreatedAt
+  const createdAtDifference = secondTimestamp - firstTimestamp
+
+  if (createdAtDifference !== 0) {
+    return createdAtDifference
+  }
+
+  if (secondOrder.display_id !== firstOrder.display_id) {
+    return secondOrder.display_id - firstOrder.display_id
+  }
+
+  return secondOrder.id.localeCompare(firstOrder.id)
+}
+
 function isAdminOrderResponse(value: unknown): value is AdminOrderResponse {
   if (!value || typeof value !== 'object') {
     return false
@@ -255,6 +276,7 @@ export default function AdminOrdersTable({
   const [orders, setOrders] = useState(initialOrders)
   const [counts, setCounts] = useState(initialCounts)
   const countsRefreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const orderRequestVersionsRef = useRef(new Map<string, number>())
 
   useEffect(() => {
     setOrders(initialOrders)
@@ -298,7 +320,7 @@ export default function AdminOrdersTable({
   }, [search])
 
   const applyOrderChange = useCallback(
-    async (change: RealtimeOrderChange) => {
+    async (change: RealtimeOrderChange, requestVersion: number) => {
       if (change.type === 'DELETE') {
         setOrders((currentOrders) =>
           currentOrders.filter((order) => order.id !== change.orderId)
@@ -310,6 +332,12 @@ export default function AdminOrdersTable({
         `/api/admin/orders/${encodeURIComponent(change.orderId)}`,
         { cache: 'no-store' }
       )
+
+      if (
+        orderRequestVersionsRef.current.get(change.orderId) !== requestVersion
+      ) {
+        return
+      }
 
       if (response.status === 404) {
         setOrders((currentOrders) =>
@@ -328,17 +356,26 @@ export default function AdminOrdersTable({
         return
       }
 
+      if (
+        orderRequestVersionsRef.current.get(change.orderId) !== requestVersion
+      ) {
+        return
+      }
+
       const freshOrder = payload.order
       const shouldDisplay =
         matchesOrderTab(freshOrder, activeTab) &&
         matchesOrderSearch(freshOrder, search)
 
       setOrders((currentOrders) => {
-        const existingIndex = currentOrders.findIndex(
+        const hasExistingOrder = currentOrders.some(
           (order) => order.id === freshOrder.id
         )
+        const ordersWithoutFreshOrder = currentOrders.filter(
+          (order) => order.id !== freshOrder.id
+        )
 
-        if (existingIndex === -1) {
+        if (!hasExistingOrder) {
           if (
             currentPage !== 1 ||
             search.trim() ||
@@ -346,17 +383,15 @@ export default function AdminOrdersTable({
           ) {
             return currentOrders
           }
-
-          return [freshOrder, ...currentOrders].slice(0, 20)
         }
 
         if (!shouldDisplay) {
-          return currentOrders.filter((order) => order.id !== freshOrder.id)
+          return ordersWithoutFreshOrder
         }
 
-        const nextOrders = [...currentOrders]
-        nextOrders[existingIndex] = freshOrder
-        return nextOrders
+        return [...ordersWithoutFreshOrder, freshOrder]
+          .sort(compareAdminOrders)
+          .slice(0, 20)
       })
     },
     [activeTab, currentPage, search]
@@ -365,6 +400,9 @@ export default function AdminOrdersTable({
   const handleOrderChange = useCallback(
     (change: RealtimeOrderChange) => {
       refreshOrderCounts()
+      const requestVersion =
+        (orderRequestVersionsRef.current.get(change.orderId) || 0) + 1
+      orderRequestVersionsRef.current.set(change.orderId, requestVersion)
       const existingTimer = pendingFetchesRef.current.get(change.orderId)
 
       if (existingTimer) {
@@ -373,13 +411,13 @@ export default function AdminOrdersTable({
 
       if (change.type === 'DELETE') {
         pendingFetchesRef.current.delete(change.orderId)
-        void applyOrderChange(change)
+        void applyOrderChange(change, requestVersion)
         return
       }
 
       const timer = setTimeout(() => {
         pendingFetchesRef.current.delete(change.orderId)
-        void applyOrderChange(change).catch(() => undefined)
+        void applyOrderChange(change, requestVersion).catch(() => undefined)
       }, 300)
 
       pendingFetchesRef.current.set(change.orderId, timer)
@@ -389,6 +427,7 @@ export default function AdminOrdersTable({
 
   useEffect(() => {
     const pendingTimers = pendingFetchesRef.current
+    const orderRequestVersions = orderRequestVersionsRef.current
 
     return () => {
       if (countsRefreshTimerRef.current) {
@@ -400,6 +439,7 @@ export default function AdminOrdersTable({
         clearTimeout(timer)
       }
       pendingTimers.clear()
+      orderRequestVersions.clear()
     }
   }, [])
 
